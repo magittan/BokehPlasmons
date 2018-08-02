@@ -6,6 +6,7 @@ class PlacedObject(object):
     def __init__(self,x_coord, y_coord):
         self.x_coord = x_coord
         self.y_coord = y_coord
+        self.type = None
 
     def get_x_coord(self):
         return self.x_coord
@@ -13,17 +14,18 @@ class PlacedObject(object):
     def get_y_coord(self):
         return self.y_coord
 
-    def set_reflector(self):
-        self.source = False
+    # Setting up the type
 
     def set_source(self):
-        self.source = True
+        self.type = "Source"
 
-    def is_reflector(self):
-        return not self.source
+    def set_reflector(self):
+        self.type = "Reflector"
 
-    def is_source(self):
-        return self.source
+    def get_type(self):
+        return self.type
+
+    # Setting up the shape
 
     def get_shape(self):
         return None
@@ -55,6 +57,9 @@ class CircularObject(PlacedObject):
 
     def get_radius(self):
         return self.radius
+
+    def get_shape(self):
+        return self.shape
 
 class PolygonalObject(PlacedObject):
 
