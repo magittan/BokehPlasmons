@@ -56,6 +56,13 @@ clickable_display.quad(source=r_source,top='top',bottom='bottom',left = 'left', 
 r_reflector = ColumnDataSource(data=dict(top=[], bottom=[], left = [], right = []))
 clickable_display.quad(source=r_reflector,top='top',bottom='bottom',left = 'left', right = "right", color = "red", alpha = 0.5)
 
+# p_source = ColumnDataSource(data=dict(x=[],y=[]))
+# clickable_display.patches()
+#
+# p_reflector = ColumnDataSource(data=dict(x=[],y=[]))
+# 
+# p.patch([1, 2, 3, 4, 5], [6, 7, 8, 7, 3], alpha=0.5, line_width=2)
+
 #Add sources and reflectors to certain clicked points
 def callback(event):
     coordinates = (event.x,event.y)
@@ -77,6 +84,25 @@ def callback(event):
         input_object.set_type(type)
         add_circle(input_object, objectList)
 
+def to_patches(data_dict):
+    x_outputs = []
+    y_outputs = []
+    top = data_dict['top']
+    bot = data_dict['bot']
+    left = data_dict['left']
+    right = data_dict['right']
+
+    for i in range(len(top)):
+        temp_x = [left[i],right[i],left[i],right[i]]
+        temp_y = [bot[i],bot[i],top[i],top[i]]
+        x_outputs.append(temp_x)
+        y_outputs.append(temp_y)
+
+    output_dict = dict()
+    output_dict['x'] = x_outputs
+    output_dict['y'] = y_outputs
+
+    return output_dict
 
 def add_rectangle(input_object, in_objectList):
     search_type = input_object.get_type()
@@ -205,6 +231,20 @@ def set_place_rectangle():
     new_dict['shape'] = ["Rectangle"]
     details.data = new_dict
 
+def update_toggle_circle_rectangle():
+    indicator = toggle_circle_rectangle.active
+    if indicator == 0:
+        set_place_circle()
+    if indicator == 1:
+        set_place_rectangle()
+
+def update_toggle_source_reflector():
+    indicator = toggle_source_reflector.active
+    if indicator == 0:
+        set_place_source()
+    if indicator == 1:
+        set_place_reflector()
+
 #-----------------------------------------------------------------------#
 
 #----------------------------Simulating---------------------------------#
@@ -280,20 +320,18 @@ button5.on_click(set_place_circle)
 button6 = Button(label="Toggle Rectangle")
 button6.on_click(set_place_rectangle)
 
-def update():
-    print toggle_circle_rectangle.active
+toggle_source_reflector = RadioButtonGroup(labels=["Source", "Reflector"], active=0)
+toggle_source_reflector.on_change('active', lambda attr ,old, new: update_toggle_source_reflector())
 
-# toggle_circle_rectangle = RadioButtonGroup(
-#         labels=["Rectangle", "Circle"], active=0)
-# toggle_circle_rectangle.on_change('active', lambda attr ,old, new, update())
-
+toggle_circle_rectangle = RadioButtonGroup(labels=["Circle", "Rectangle"], active=0)
+toggle_circle_rectangle.on_change('active', lambda attr ,old, new: update_toggle_circle_rectangle())
 
 #-----------------------------------------------------------------------#
 
 clickable_display.on_event(DoubleTap, callback)
 
-toggle_source_reflector = row(button3, button4)
-toggle_circle_rectangle = row(button5, button6)
+# toggle_source_reflector = row(button3, button4)
+# toggle_circle_rectangle = row(button5, button6)
 
 button_display = column(button1, button2, toggle_source_reflector,toggle_circle_rectangle, width = 50)
 circular_slider_display = column(circular_title,circular_radius)
