@@ -5,8 +5,7 @@ from bokeh.events import DoubleTap
 from bokeh.models import Button, ContinuousColorMapper, BasicTicker, ColorBar
 from bokeh.models.widgets import Slider
 from bokeh.layouts import column, row, widgetbox
-from bokeh.models.widgets import PreText, RadioButtonGroup, TextInput
-from bokeh.layouts import gridplot
+from bokeh.models.widgets import PreText, RadioButtonGroup
 import Plasmon_Modeling as PM
 import PlacedObjects as PO
 import numpy as np
@@ -15,8 +14,7 @@ import numpy as np
 bound = 50
 objectList= []
 display_data= ColumnDataSource({'data' : [np.zeros((50,50))]})
-details = ColumnDataSource({'type' : ["Source"], 'shape': ["Circle"],'rotation': [0]})
-simulation_params = ColumnDataSource({'Q' : [100], 'l': [4]})
+details = ColumnDataSource({'type' : ["Source"], 'shape': ["Circle"]})
 
 #Update message section
 update_section_title = "Update Section"
@@ -38,8 +36,6 @@ output_display.image('data', source=display_data, palette="Viridis256",
 updates = PreText(text='Update Section', width=350)
 circular_title = PreText(text='Circular Reflectors/Sources', width=350)
 rectangular_title =  PreText(text='Rectangular Reflectors/Sources', width=350)
-rotation_title =  PreText(text='Rotation (Degrees)', width=350)
-simulation_params_title =  PreText(text='Rotation (Degrees)', width=350)
 
 #setting up sliders
 circular_radius = Slider(title = "Radius",value = 2, start = 1, end = 10, step = 1)
@@ -73,9 +69,9 @@ def callback(event):
     type = details.data['type'][0]
     shape = details.data['shape'][0]
 
-    print(coordinates)
-    print(type)
-    print(shape)
+    print coordinates
+    print type
+    print shape
 
     #Checking the shape
     if shape == "Rectangle":
@@ -132,7 +128,7 @@ def to_patches(data_dict):
 #         p_reflector.data = to_patches(update_data)
 
 def add_rectangle(input_object, in_objectList):
-    print("Adding rectangle")
+    print "Adding rectangle"
     search_type = input_object.get_type()
     in_objectList.append(input_object)
 
@@ -281,27 +277,6 @@ def update_toggle_source_reflector():
     if indicator == 1:
         set_place_reflector()
 
-#--------------------------Setting Variables----------------------------#
-
-def set_Q_handler(attr, old, new):
-    set_Q(new)
-
-def set_L_handler(attr, old, new):
-    set_L(new)
-
-
-def set_Q(new):
-    new_dict = {}
-    new_dict['l'] = simulation_params.data['l']
-    new_dict['Q'] = [new]
-    simulation_params.data = new_dict
-
-def set_L(new):
-    new_dict = {}
-    new_dict['Q'] = simulation_params.data['Q']
-    new_dict['l'] = [new]
-    simulation_params.data = new_dict
-
 #-----------------------------------------------------------------------#
 
 #----------------------------Simulating---------------------------------#
@@ -337,7 +312,7 @@ def simulating_model(in_objectList):
     #setting arbitrary omega and sigma values
     sigma = PM.S()
     omega = PM.O()
-    sigma.set_sigma_values_RQ(float(simulation_params.data['l'][0]),float(simulation_params.data['Q'][0]))
+    sigma.set_sigma_values(1,10)
     omega.set_omega_values(1,1)
 
     update_updates('Running Simulation')
@@ -345,18 +320,12 @@ def simulating_model(in_objectList):
     sample.run(omega,sigma,density = 200)
 
     update_updates('Done!')
-    results = sample.cast_solution_to_Array()
+    awa = sample.cast_solution_to_AWA()
 
-    display_data.data = dict(data = [results[0]])
-#-----------------------------------------------------------------------#
-#-----------------------------Text Input--------------------------------#
+    real_part = awa[0].T
+    im_part = awa[1].T
 
-quality_factor_input = TextInput(value="100", title="Quality Factor")
-quality_factor_input.on_change("value",set_Q_handler)
-
-plasmon_wavelength_input = TextInput(value="4", title="Plasmon Wavelength")
-plasmon_wavelength_input.on_change("value",set_L_handler)
-
+    display_data.data = dict(data = [real_part])
 #-----------------------------------------------------------------------#
 
 #--------------------------------Buttons--------------------------------#
@@ -383,9 +352,8 @@ button5.on_click(set_place_circle)
 button6 = Button(label="Toggle Rectangle")
 button6.on_click(set_place_rectangle)
 
-#Button 7
-# button7 = Button(label="Undo")
-# button7.on_click(undo_place)
+button7 = Button(label="Undo")
+button7.on_click(undo_place)
 
 toggle_source_reflector = RadioButtonGroup(labels=["Source", "Reflector"], active=0)
 toggle_source_reflector.on_change('active', lambda attr ,old, new: update_toggle_source_reflector())
@@ -403,14 +371,8 @@ clickable_display.on_event(DoubleTap, callback)
 # toggle_source_reflector = row(button3, button4)
 # toggle_circle_rectangle = row(button5, button6)
 
-
-button_display = column(button1, button2, toggle_source_reflector,toggle_circle_rectangle, width = 200)
+button_display = column(button1, button2, toggle_source_reflector,toggle_circle_rectangle,button7, width = 50)
 circular_slider_display = column(circular_title,circular_radius)
 rectangular_slider_display = column(rectangular_title, rectangular_width, rectangular_height)
-rotation_display = column(rotation_title,rotation)
-simulation_params_display = column(simulation_params_title,quality_factor_input,plasmon_wavelength_input)
-
-# grid=gridplot([[button_display,rotation_display],[circular_slider_display,rectangular_slider_display]])
-
-right_display = column(button_display,circular_slider_display,rectangular_slider_display,rotation_display,simulation_params_display,updates)
+right_display = column(button_display,circular_slider_display,rectangular_slider_display,updates)
 curdoc().add_root(row(clickable_display,output_display,right_display))

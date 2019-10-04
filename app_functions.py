@@ -12,7 +12,7 @@ def rotate_object(vertices_list, rotation_degrees):
     c, s = np.cos(theta), np.sin(theta)
     R = np.array(((c,-s), (s, c)))
     for vertex in vertices_list:
-        output_vertices.append([vertex[0]*c-vertex[1]*s,vertex[0]*c+vertex[1]*s])
+        output_vertices.append([vertex[0]*c-vertex[1]*s,vertex[1]*c+vertex[0]*s])
     return output_vertices
         #Complete this and then run the bokeh webapp and finished convertig from 2 to 3, running into problems with h5py
 
