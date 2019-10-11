@@ -1,3 +1,4 @@
+import numpy as np
 #--------------Object oriented part------------#
 #Going to need to be able to control lists of these, transform those lists into four CDSs for display
 
@@ -41,10 +42,15 @@ class PlacedObject(object):
 
 class RectangularObject(PlacedObject):
 
-    def __init__(self,x_coord, y_coord, width, height):
+    def __init__(self,x_coord, y_coord, width, height, angle):
         super(RectangularObject, self).__init__(x_coord, y_coord)
         self.width = width
         self.height = height
+        self.angle = np.radians(angle)
+        self.cx = self.x_coord + self.width/2
+        self.cy = self.y_coord + self.height/2
+        c,s = np.cos(self.angle), np.sin(self.angle)
+        self.rotation_matrix = np.array(((c,-s),(s,c)))
         self.set_shape("Rectangle")
 
     def get_width(self):
@@ -53,8 +59,20 @@ class RectangularObject(PlacedObject):
     def get_height(self):
         return self.height
 
+    def get_angle(self):
+        return self.angle
+
     def get_coordinates(self):
-        return [[self.x_coord,self.y_coord],[self.x_coord,self.y_coord+self.height],[self.x_coord+self.width,self.y_coord+self.height],[self.x_coord+self.width,self.y_coord]]
+        P1 = self.rotate(self.x_coord,self.y_coord)
+        P2 = self.rotate(self.x_coord,self.y_coord+self.height)
+        P3 = self.rotate(self.x_coord+self.width,self.y_coord+self.height)
+        P4 = self.rotate(self.x_coord+self.width,self.y_coord)
+        return [list(P1),list(P2),list(P3),list(P4)]
+
+    def rotate(self,x,y):
+        orig = np.array((x,y))
+        center = np.array((self.cx,self.cy))
+        return self.rotation_matrix.dot(orig-center)+center
 
 class CircularObject(PlacedObject):
 
@@ -71,11 +89,9 @@ class PolygonalObject(PlacedObject):
     def __init__(self):
         pass
 
-
-
 # General Functionality Test
 test1 = PlacedObject(1,2)
-test2 = RectangularObject(1,2,3,4)
+test2 = RectangularObject(1,2,3,4,0)
 test3 = CircularObject(1,2,3)
 
 test1.set_type("Source")

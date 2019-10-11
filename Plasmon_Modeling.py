@@ -1,7 +1,7 @@
 from __future__ import division
-# from dolfin import *
 from fenics import *
 from mshr import *
+from dolfin import *
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 import matplotlib.pyplot as plt
 import matplotlib.tri as tri
@@ -133,7 +133,7 @@ class RectangularSample(object):
         except:
             raise Exception('Failed to set Domain')
 
-    def getMesh(self,density = 200):
+    def getMesh(self,density = 200,to_plot=False):
         """Produces a Fenics Mesh Object from the rectangular sample object
 
         Args:
@@ -142,7 +142,11 @@ class RectangularSample(object):
         Returns:
             Fenics Mesh Object
         """
-        return generate_mesh(self.domain, density)
+        mesh = generate_mesh(self.domain, density)
+        if to_plot:
+            plot(mesh)
+            plt.show()
+        return mesh
 
     def placeCircularSource(self,x_pos,y_pos,sourceRadius):
         """Places a circular source, a circular region with dirichlet boundary conditions, at a specified
@@ -175,7 +179,7 @@ class RectangularSample(object):
         circ = Circle(Point(x_pos, y_pos), reflectorRadius)
         self.domain-=circ
 
-    def placeRectangularSource(self,x_pos,y_pos,width, height):
+    def placeRectangularSource(self,x_pos,y_pos,width, height, angle):
         """Places a rectangular source, a rectangular region with dirichlet boundary conditions, at a specified
            coordinate position on the sample. The x_pos and y_pos arguments specify the position of the bottom
            left corner of the rectangular source.
@@ -191,8 +195,28 @@ class RectangularSample(object):
 
         """
         self.number_of_objects += 1
-        rec = Rectangle(Point(x_pos, y_pos),
-                    Point(x_pos+width, y_pos+height))
+        c,s = np.cos(angle), np.sin(angle)
+        rotation_matrix = np.array(((c,-s),(s,c)))
+        angle_deg = (180/np.pi)*angle
+
+        center = np.array((x_pos+width/2,y_pos+height/2))
+        bottom_left = np.array((x_pos,y_pos))
+        bottom_right = np.array((x_pos+width,y_pos))
+        top_right = np.array((x_pos+width,y_pos+height))
+        top_left = np.array((x_pos,y_pos+height))
+
+        rotated_bottom_left = rotation_matrix.dot(bottom_left-center)+center
+        rotated_bottom_right = rotation_matrix.dot(bottom_right-center)+center
+        rotated_top_right = rotation_matrix.dot(top_right-center)+center
+        rotated_top_left = rotation_matrix.dot(top_left-center)+center
+        #rec = Rectangle(Point(x_pos,y_pos),
+        #            Point(x_pos+width, y_pos+height))
+        P1 = Point(list(rotated_bottom_left))
+        P2 = Point(list(rotated_bottom_right))
+        P3 = Point(list(rotated_top_right))
+        P4 = Point(list(rotated_top_left))
+        rec = Polygon((P1,P2,P3,P4))
+        #rec = CSGRotation(CSGGeometry(rec),angle_deg, Point(x_pos+width/2,y_pos+height/2))
         self.domain.set_subdomain(self.number_of_objects, rec)
 
     #the position placement is dependent on the bottom left hand corner
@@ -234,24 +258,24 @@ class RectangularSample(object):
         rec = Polygon(points)
         self.domain-=rec
 
-#     def n_placeCircularReflector(self,x_pos,y_pos,reflectorRadius):
+    #     def n_placeCircularReflector(self,x_pos,y_pos,reflectorRadius):
 #         self.number_of_objects += 1
 #         circ = Circle(Point(x_pos, y_pos), sourceRadius/2)
 #         self.domain.set_subdomain(self.number_of_objects, circ)
 
 
-#     def define_boundaries(self, density = 200):
-#         defined_mesh = self.getMesh(density=density)
-#         self.boundary_markers = MeshFunction('size_t', defined_mesh, 2, mesh.domains())
-#         self.boundaries = MeshFunction('size_t', defined_mesh, 1, mesh.domains())
+    #     def define_boundaries(self, density = 200):
+    #         defined_mesh = self.getMesh(density=density)
+    #         self.boundary_markers = MeshFunction('size_t', defined_mesh, 2, mesh.domains())
+    #         self.boundaries = MeshFunction('size_t', defined_mesh, 1, mesh.domains())
 
-#         # Use the cell domains associated with each facet to set the boundary
-#         for f in facets(defined_mesh):
-#             domains = []
-#             for c in cells(f):
-#                 domains.append(self.boundary_markers[c])
+    #         # Use the cell domains associated with each facet to set the boundary
+    #         for f in facets(defined_mesh):
+    #             domains = []
+    #             for c in cells(f):
+    #                 domains.append(self.boundary_markers[c])
 
-#             domains = list(set(domains))
+    #             domains = list(set(domains))
 #             if len(domains) > 1:
 #                 self.boundaries[f] = 2
 
@@ -372,8 +396,6 @@ class RectangularSample(object):
         #TODO FOR ALEX, SIGN IN FRONT OF O, NOT PRODUCING WAVES
         F0 = (s_1*s_1+s_2*s_2)*dot(grad(u_1), grad(q))*dx+o*(s_1*u_2-s_2*u_1)*q*dx
         F1 = (s_1*s_1+s_2*s_2)*dot(grad(u_2), grad(v))*dx-o*(s_1*u_1+s_2*u_2)*v*dx
-#         F0 = (s_1*s_1+s_2*s_2)*dot(grad(u_1), grad(q))*dx-o*(s_1*u_2-s_2*u_1)*q*dx
-#         F1 = (s_1*s_1+s_2*s_2)*dot(grad(u_2), grad(v))*dx-o*(s_1*u_1+s_2*u_2)*v*dx
         F = F0 + F1 # + Constant(20.0)*q*ds + Constant(20.0)*v*ds
         a, L = lhs(F), rhs(F)
 
@@ -383,13 +405,6 @@ class RectangularSample(object):
 
         if to_plot:
             fig = plt.figure()
-    #         plt.subplot(131);mplot(mesh);plt.title("Mesh"),plt.tick_params(
-    #             axis='both',          # changes apply to the x-axis
-    #             which='both',      # both major and minor ticks are affected
-    #             bottom=False,
-    #             right = False,     # ticks along the bottom edge are off
-    #             left = False,
-    #             top=False)         # ticks along the top edge are off)
             plt.subplot(121);mplot(z.split(deepcopy=True)[0]);plt.title("Real Part"),plt.tick_params(
                 axis='both',          # changes apply to the x-axis
                 which='both',      # both major and minor ticks are affected
@@ -454,7 +469,6 @@ class RectangularSample(object):
             return on_boundary
 
         #Establishing the Boundary Conditions
-#         bc_O = DirichletBC(V, Constant(1.0), u0_boundary)
         bc = DirichletBC(V, Constant(0.0), u0_boundary)
 
         bc_I = DirichletBC(V, Constant(1.0), boundaries, 2)
