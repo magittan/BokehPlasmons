@@ -144,6 +144,7 @@ class RectangularSample(object):
         """
         mesh = generate_mesh(self.domain, density)
         if to_plot:
+            plt.clf()
             plot(mesh)
             plt.show()
         return mesh
@@ -258,27 +259,6 @@ class RectangularSample(object):
         rec = Polygon(points)
         self.domain-=rec
 
-    #     def n_placeCircularReflector(self,x_pos,y_pos,reflectorRadius):
-#         self.number_of_objects += 1
-#         circ = Circle(Point(x_pos, y_pos), sourceRadius/2)
-#         self.domain.set_subdomain(self.number_of_objects, circ)
-
-
-    #     def define_boundaries(self, density = 200):
-    #         defined_mesh = self.getMesh(density=density)
-    #         self.boundary_markers = MeshFunction('size_t', defined_mesh, 2, mesh.domains())
-    #         self.boundaries = MeshFunction('size_t', defined_mesh, 1, mesh.domains())
-
-    #         # Use the cell domains associated with each facet to set the boundary
-    #         for f in facets(defined_mesh):
-    #             domains = []
-    #             for c in cells(f):
-    #                 domains.append(self.boundary_markers[c])
-
-    #             domains = list(set(domains))
-#             if len(domains) > 1:
-#                 self.boundaries[f] = 2
-
     def set_boundary_conditions(self, function_space, dim = 1, density = 200):
         """Uses the generate mesh functionality in order to set boundary conditions before a run.
 
@@ -329,7 +309,7 @@ class RectangularSample(object):
 
         return [bc_O,bc_I]
 
-    def run(self,omega, sigma, to_plot=False, density = 200):
+    def run(self,omega, sigma, to_plot=False, density = 200, _lam=1, _phi=2*pi):
         """Solves the plasmon wave equation on the pre-defined sample. Requires input omega and sigma objects
            that are the parameters for the plasmon wave equation.
 
@@ -344,6 +324,7 @@ class RectangularSample(object):
             a FEniCS function that represents the solution to the wave equation
 
         """
+        set_log_level(16)
         mesh = self.getMesh(density)
         L3 = FiniteElement("Lagrange", mesh.ufl_cell(), 2)
         V = MixedElement([L3,L3])
@@ -370,7 +351,11 @@ class RectangularSample(object):
 
         bc_O = DirichletBC(ME, (Constant(0.0),Constant(0.0)), u0_boundary)
 
-        bc_I = DirichletBC(ME,(Constant(1.0),(Constant(1.0))), boundaries, 2)
+        #g = Expression('cos((2*pi/lam)*cos(phi)*x[0]+(2*pi/lam)*sin(phi)*x[1])', degree = 1, phi=_phi, lam=_lam)
+        g = Expression(('cos( (2*pi/lam)*(cos(phi)*x[0]+sin(phi)*x[1]) )','cos( (2*pi/lam)*(cos(phi)*x[0]+sin(phi)*x[1]) )'),
+            element = ME.ufl_element(), phi=_phi, lam=_lam)
+        bc_I = DirichletBC(ME,g, boundaries, 2)
+        #bc_I = DirichletBC(ME,(Constant(1.0),(Constant(1.0))), boundaries, 2)
 
         s_1,s_2 = sigma.get_sigma_values()
         o = omega.get_omega_values()
@@ -422,9 +407,6 @@ class RectangularSample(object):
                 top=False,         # ticks along the top edge are off
                 labelleft=False);plt.colorbar()
 
-    #         fig.subplots_adjust(right=0.8)
-    #         cbar_ax = fig.add_axes([0.85, 0.15, 0.05, 0.7])
-    #         fig.colorbar(plt.subplot(133), cax=cbar_ax)
             plt.show()
 
         self.solution = z
@@ -491,7 +473,7 @@ class RectangularSample(object):
         _ = PETScVector()
         L = Constant(0.0)*v*dx
 
-#         bcs = [bc_O,bc_I]
+        #bcs = [bc_O,bc_I]
 
         assemble_system(a, L, bc, A_tensor=A, b_tensor=_)
         #assemble_system(m, L,bc, A_tensor=M, b_tensor=_)

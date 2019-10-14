@@ -97,6 +97,7 @@ test3 = CircularObject(1,2,3)
 test1.set_type("Source")
 test2.set_type("Reflector")
 
+"""
 print("General Object")
 print("shape: {}, type: {}, x_coord: {}, y_coord: {}".format(test1.get_shape(),test1.get_type(),test1.get_x_coord(),test1.get_y_coord()))
 
@@ -105,3 +106,4 @@ print("shape: {}, type: {}, x_coord: {}, y_coord: {}, width: {}, height: {}".for
 
 print("Circular Object")
 print("shape: {}, type: {}, x_coord: {}, y_coord: {}, radius: {}".format(test3.get_shape(),test3.get_type(),test3.get_x_coord(),test3.get_y_coord(), test3.get_radius()))
+"""
