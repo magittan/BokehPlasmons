@@ -62,11 +62,6 @@ class BesselGenerator(object):
 
         #Bookkeeping of the coordinate mesh
         self.xs,self.ys=xs,ys
-        xv, yv = np.meshgrid(xs,ys,sparse=True)
-
-        rs = np.sqrt(xv**2+yv**2)
-        theta = np.arctan(yv/xv)
-        theta[np.where(np.isnan(theta))] = 0
         self.shape=(len(xs),len(ys))
         self.midx=self.xs[self.shape[0]//2]
         self.midy=self.ys[self.shape[1]//2]
@@ -79,23 +74,34 @@ class BesselGenerator(object):
                                  self.midy-self.dy:self.midy+self.dy:bigshape[1]*1j]
         self.xs2=xs2grid.squeeze()
         self.ys2=ys2grid.squeeze()
-        rs2 = np.sqrt(xs2grid**2+ys2grid**2)
-        theta2 = np.arctan(ys2grid/xs2grid)
-        theta2[np.where(np.isnan(theta2))] = 0
-        N_tip_eigenbasis = 50
-        self.Jv = np.random.randint(0,high=5,size=N_tip_eigenbasis)
 
+        N_tip_eigenbasis = 10
+        J_zeros = sp.jn_zeros(0,N_tip_eigenbasis)
+        rs2 = np.sqrt(xs2grid**2+ys2grid**2)
+        self.Jbasis = np.array([(2/sp.jv(1,J_zeros[n]))*sp.jv(0,J_zeros[n]*rs2) for n in range(N_tip_eigenbasis)])
+
+        self.Jv = np.random.randint(0,high=5,size=N_tip_eigenbasis)
         print('Excitation vector (in basis of J(n), n in [0,{}]):\n\t{}'.format(N_tip_eigenbasis,self.Jv))
-        self.Jbasis = np.array([sp.jv(n,q*np.sqrt(xs2grid**2+ys2grid**2)) for n in range(5)])
-        #self.Jbasis = np.array([sp.jv(alpha//10,alpha//10*rs2)*np.cos((alpha%10)*theta2) for alpha in range(N_tip_eigenbasis)])
+
         self.Jm = np.array([u*self.Jbasis[i] for i,u in enumerate(self.Jv)])
         self.bigJ=np.sum(self.Jm,axis=0)
-        print(self.bigJ.shape)
-        self.smallJbasis = np.array([sp.jv(alpha//10,10*rs)*np.cos((alpha%10)*theta) for alpha in range(N_tip_eigenbasis)])
-        #self.smallJbasis = np.array([sp.jv(n,q*np.sqrt(xsm**2+ysm**2)) for n in range(10)])
+
+    def GetTipEigenbasis(self,x0,y0):
+        indx=np.argmin(np.abs(x0-self.xs2))
+        indy=np.argmin(np.abs(y0-self.ys2))
+        shiftx=self.shape[0]+indx
+        shifty=self.shape[1]+indy
+
+        tip_eigenbasis = []
+        for u in self.Jbasis:
+            newJ=np.roll(np.roll(u,shiftx,axis=0),\
+                         shifty,axis=1)
+            output = newJ[self.shape[0]//2:(3*self.shape[0])//2,\
+                        self.shape[1]//2:(3*self.shape[1])//2]
+            tip_eigenbasis.append(output)
+        return np.array(tip_eigenbasis)
 
     def __call__(self,x0,y0):
-        Jbasis = []
         indx=np.argmin(np.abs(x0-self.xs2))
         indy=np.argmin(np.abs(y0-self.ys2))
         shiftx=self.shape[0]+indx
@@ -105,13 +111,7 @@ class BesselGenerator(object):
                      shifty,axis=1)
         output = newJ[self.shape[0]//2:(3*self.shape[0])//2,\
                     self.shape[1]//2:(3*self.shape[1])//2]
-        for J in self.Jbasis:
-            rolledJ=np.roll(np.roll(J,shiftx,axis=0),\
-                         shifty,axis=1)
-            rolled_cutJ = rolledJ[self.shape[0]//2:(3*self.shape[0])//2,\
-                        self.shape[1]//2:(3*self.shape[1])//2]
-            Jbasis.append(rolled_cutJ)
-        return output, np.array(Jbasis)
+        return output
 
 class SampleResponse(object):
     """
@@ -203,15 +203,15 @@ class SampleResponse(object):
         """
 
     def _SetScatteringMatrix(self):
-        #self.D=np.matrix(np.diag(1/(self.use_eigvals-E)))
-        # D = E*(E*I - alpha*Q*V)^(-1)
         self.D = self.E*np.linalg.inv(self.E*np.identity(self.Q.shape[0]) - self.alpha*self.Q.dot(self.V_nm))
 
-    def GetEnergyWeights(self):
-
-        weights=np.abs(np.diag(self.D))
-
-        return AWA(weights,axes=[self.use_eigvals])
+    def GetRAlphaBeta(self, tip_eigenbasis):
+        U = ChangeBasis(tip_eigenbasis, self.use_eigfuncs, self.xs, self.ys)
+        #plt.figure();plt.imshow(U);plt.show();
+        #U_inv = np.linalg.inv(U)
+        U_inv = U.T
+        result = np.dot(U,np.dot(self.D,U_inv))
+        return result
 
     def __call__(self,excitations,U,tip_eigenbasis):
 
@@ -326,5 +326,28 @@ def scan_source_at_q_and_E(q=20,\
     plt.title('Projected response at scanned positions')
     plt.tight_layout()
     plt.show()
+
+    return output
+
+def TestScatteringBasisChange(q=20,\
+                           E=2000*np.exp(1j*2*np.pi*5e-2),\
+                           N=100):
+
+    global Responder,Jmaker
+
+    Responder=SampleResponse(eigpairs,E=E,N=N)
+    xs,ys=Responder.xs,Responder.ys
+    Jmaker=BesselGenerator(q,xs=xs,ys=ys)
+
+    last = 0
+    for i,x0 in enumerate(xs):
+        for j,y0 in enumerate(ys):
+            print(i,j)
+            start = time.time()
+            tip_eigenbasis=Jmaker.GetTipEigenbasis(x0,y0)
+            Responder.GetRAlphaBeta(tip_eigenbasis)
+            elapsed = time.time()-start
+            print('Time elapsed per loop: {} s'.format(elapsed))
+            last = Progress(i,len(xs),last)
 
     return output

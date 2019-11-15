@@ -1,7 +1,7 @@
 from bokeh.io import curdoc
 from bokeh.events import DoubleTap
 from bokeh.layouts import column, row, widgetbox, gridplot
-from bokeh.models import ColumnDataSource, Column, Button, ContinuousColorMapper, BasicTicker, ColorBar
+from bokeh.models import CustomJS,ColumnDataSource, Column, Button, ContinuousColorMapper, BasicTicker, ColorBar, OpenURL
 from bokeh.models.widgets import PreText, RadioButtonGroup, TextInput, Slider, Div, Dropdown
 from bokeh.plotting import figure, show
 import Plasmon_Modeling as PM
@@ -151,6 +151,12 @@ def UpdatePlotValue(attr,old,new):
     w = int(mesh_width_input.value)
     h = int(mesh_height_input.value)
     output_display.image(new, source = display_data.data,x=0,y=0,dw=w,dh=h,palette='Viridis256')
+
+def TestURLCallback(event):
+    with open('./myapp/static/test1.dat','w+') as f:
+        f.write('test\ntest test\n')
+    url = 'localhost:5006/myapp/static/test1.dat'
+
 
 #--Setting Variables----#
 
@@ -327,6 +333,9 @@ run_button = Button(label='Run Simulation',width=150)
 reset_button = Button(label='Reset Board',width=150)
 generate_mesh_button = Button(label='Generate Mesh',width=200)
 
+jscallback = CustomJS(code='window.open("/myapp/static/test1.dat");')
+test_url_button = Button(label='Test URL Generation',width=200,callback=jscallback)
+
 # Radio buttons
 toggle_source_reflector = RadioButtonGroup(labels=['Source', 'Reflector'], active=0,width=200)
 toggle_circle_rectangle = RadioButtonGroup(labels=['Circle', 'Rectangle'], active=1,width=200)
@@ -344,6 +353,7 @@ run_button.on_click(Run)
 reset_button.on_click(Reset)
 generate_mesh_button.on_click(GenerateMesh)
 undo_button.on_click(UndoPlace)
+#test_url_button.on_click(TestURLCallback)
 toggle_source_reflector.on_change('active', lambda attr ,old, new: UpdateTypeToggle())
 toggle_circle_rectangle.on_change('active', lambda attr ,old, new: UpdateShapeToggle())
 quality_factor_input.on_change('value',SetQ)
@@ -381,6 +391,7 @@ right_display_column_elements = [
     dirichlet_params_display,
     plot_value_dropdown,
     button_display,
+    test_url_button,
     Div(width = 300, height = 1, background = '#000000'),
     updates_pretext
 ]
