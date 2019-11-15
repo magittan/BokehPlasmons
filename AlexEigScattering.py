@@ -17,6 +17,7 @@ from scipy.integrate import simps
 from numba import jit
 import multiprocessing as mp
 from itertools import product
+from numba import jit, cuda
 #%matplotlib notebook
 
 def Progress(i,L,last):
@@ -47,6 +48,24 @@ def ChangeBasis(to_eigenbasis,from_eigenbasis,xs,ys):
             U[to_n,from_n] = sum
             #last = Progress(to_n*from_n, N, last)
     return U
+
+@cuda.jit
+def ChangeBasisGPU(U, to_eigenbasis,from_eigenbasis,xs,ys):
+    row, col = cuda.grid(2)
+    dx = xs[1]-xs[0]
+    dy = ys[1]-ys[0]
+    sx, sy = to_eigenbasis[0].shape
+    if row < U.shape[0] and col < U.shape[1]:
+        sum = 0.
+        to_ef = to_eigenbasis[row]
+        from_ef = from_eigenbasis[col]
+        for i in range(from_ef.shape[0]):
+            for j in range(from_ef.shape[1]):
+                sum += from_ef[i,j]*to_ef[i,j]*dx*dy
+        cuda.syncthreads()
+        U[row,col] = sum
+        #U.append(row)
+    #return U
 
 class BesselGenerator(object):
     """
@@ -206,7 +225,25 @@ class SampleResponse(object):
         self.D = self.E*np.linalg.inv(self.E*np.identity(self.Q.shape[0]) - self.alpha*self.Q.dot(self.V_nm))
 
     def GetRAlphaBeta(self, tip_eigenbasis):
-        U = ChangeBasis(tip_eigenbasis, self.use_eigfuncs, self.xs, self.ys)
+        TPB = 16
+        threadsperblock = (TPB,TPB)
+        N_tip_eigenfunctions = len(tip_eigenbasis)
+        N_sample_eigenfunctions = len(self.use_eigfuncs)
+        blockspergrid_x = int(math.ceil(N_tip_eigenfunctions/threadsperblock[0]))
+        blockspergrid_y = int(math.ceil(N_sample_eigenfunctions/threadsperblock[1]))
+        blockspergrid = (blockspergrid_x,blockspergrid_y)
+
+        d_sample_eigenbasis = cuda.to_device(self.use_eigfuncs)
+        d_tip_eigenbasis = cuda.to_device(tip_eigenbasis)
+        d_U = cuda.device_array((N_sample_eigenfunctions,N_tip_eigenfunctions))
+
+        #start = time.time()
+        ChangeBasisGPU[blockspergrid,threadsperblock](d_U,d_sample_eigenbasis,d_tip_eigenbasis,xs,ys)
+        #GPU_elapsed = time.time()-start
+        #print("Basis Change (tip to sample) with GPU: {} seconds".format(GPU_elapsed))
+        #print("Speedup: {}".format(unopt_elapsed/GPU_elapsed))
+        U = d_U.copy_to_host()
+        #U = ChangeBasis(tip_eigenbasis, self.use_eigfuncs, self.xs, self.ys)
         #plt.figure();plt.imshow(U);plt.show();
         #U_inv = np.linalg.inv(U)
         U_inv = U.T
