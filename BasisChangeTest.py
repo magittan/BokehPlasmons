@@ -3,7 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.special import jv
 from scipy.integrate import nquad
-#from numba import jit, cuda, prange
+from numba import jit, cuda, prange
 
 # Basis change functions
 def ChangeBasis(to_eigenbasis,from_eigenbasis,xs,ys):
@@ -22,7 +22,6 @@ def ChangeBasis(to_eigenbasis,from_eigenbasis,xs,ys):
             last = Progress(to_n*from_n, N, last)
     return U
 
-"""
 @jit
 def ChangeBasisCPU(to_eigenbasis,from_eigenbasis,xs,ys):
     to_nn = range(to_eigenbasis.shape[0])
@@ -55,7 +54,6 @@ def ChangeBasisGPU(U, to_eigenbasis,from_eigenbasis,xs,ys):
         U[row,col] = sum
         #U.append(row)
     #return U
-"""
 
 def TestBasisChange(U,from_eigenbasis,to_eigenbasis):
     from_v = OneHot(0,U.shape[1])+OneHot(1,U.shape[1])+OneHot(2,U.shape[1])
@@ -166,7 +164,6 @@ def main():
     unopt_elapsed = time.time()-start
     print("Basis Change (tip to sample): {} seconds".format(unopt_elapsed))
 
-    """
     threadsperblock = (TPB,TPB)
     blockspergrid_x = int(math.ceil(N_tip_eigenfunctions/threadsperblock[0]))
     blockspergrid_y = int(math.ceil(N_sample_eigenfunctions/threadsperblock[0]))
@@ -181,7 +178,6 @@ def main():
     print("Basis Change (tip to sample) with GPU: {} seconds".format(GPU_elapsed))
     print("Speedup: {}".format(unopt_elapsed/GPU_elapsed))
     U_tip_to_sample_GPU = d_U.copy_to_host()
-    """
 
     TestBasisChange(U_tip_to_sample,tip_eigenbasis,sample_eigenbasis)
     #TestBasisChange(U_tip_to_sample_GPU)

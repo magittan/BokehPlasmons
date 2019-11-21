@@ -267,6 +267,7 @@ def SimulateModel(in_objectList):
     display_data.data['Phase'] = [phi]
     w = int(mesh_width_input.value)
     h = int(mesh_height_input.value)
+    print(plot_value_dropdown.value)
     new_d = ColumnDataSource({'data': display_data.data[plot_value_dropdown.value]})
     output_display.image('data',source=new_d,x=0,y=0,dw=w,dh=h, palette='Viridis256')
     #output_display.image(plot_value_dropdown.value,source=display_data,x=0,y=0,dw=w,dh=h, palette='Viridis256')
@@ -341,7 +342,7 @@ toggle_source_reflector = RadioButtonGroup(labels=['Source', 'Reflector'], activ
 toggle_circle_rectangle = RadioButtonGroup(labels=['Circle', 'Rectangle'], active=1,width=200)
 
 # Dropdown
-plot_value_dropdown = Dropdown(label='Real Part',default_value='Real Part',menu=[
+plot_value_dropdown = Dropdown(label='Real Part',value='Real Part',menu=[
     'Real Part',
     'Imaginary Part',
     'Phase',
