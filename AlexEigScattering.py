@@ -3,6 +3,7 @@
 #from fenics import *
 #from mshr import *
 #TODO: check units of eigenvalues, with proper mesh spacing in Helmholtz solver
+import BasisChangeTest as BCT
 import Plasmon_Modeling as PM
 import CoulombKernel as CK
 import os,time, h5py
@@ -14,10 +15,9 @@ from scipy import special as sp
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.integrate import simps
-from numba import jit
 import multiprocessing as mp
 from itertools import product
-from numba import jit, cuda
+#from numba import cuda
 #%matplotlib notebook
 
 def Progress(i,L,last):
@@ -49,6 +49,7 @@ def ChangeBasis(to_eigenbasis,from_eigenbasis,xs,ys):
             #last = Progress(to_n*from_n, N, last)
     return U
 
+"""
 @cuda.jit
 def ChangeBasisGPU(U, to_eigenbasis,from_eigenbasis,xs,ys):
     row, col = cuda.grid(2)
@@ -66,6 +67,7 @@ def ChangeBasisGPU(U, to_eigenbasis,from_eigenbasis,xs,ys):
         U[row,col] = sum
         #U.append(row)
     #return U
+"""
 
 class BesselGenerator(object):
     """
@@ -225,29 +227,18 @@ class SampleResponse(object):
         self.D = self.E*np.linalg.inv(self.E*np.identity(self.Q.shape[0]) - self.alpha*self.Q.dot(self.V_nm))
 
     def GetRAlphaBeta(self, tip_eigenbasis):
-        TPB = 16
-        threadsperblock = (TPB,TPB)
-        N_tip_eigenfunctions = len(tip_eigenbasis)
-        N_sample_eigenfunctions = len(self.use_eigfuncs)
-        blockspergrid_x = int(math.ceil(N_tip_eigenfunctions/threadsperblock[0]))
-        blockspergrid_y = int(math.ceil(N_sample_eigenfunctions/threadsperblock[1]))
-        blockspergrid = (blockspergrid_x,blockspergrid_y)
-
-        d_sample_eigenbasis = cuda.to_device(self.use_eigfuncs)
-        d_tip_eigenbasis = cuda.to_device(tip_eigenbasis)
-        d_U = cuda.device_array((N_sample_eigenfunctions,N_tip_eigenfunctions))
-
         #start = time.time()
-        ChangeBasisGPU[blockspergrid,threadsperblock](d_U,d_sample_eigenbasis,d_tip_eigenbasis,xs,ys)
+        U = BCT.ChangeBasisGPU(tip_eigenbasis,self.use_eigfuncs,self.xs,self.ys)
         #GPU_elapsed = time.time()-start
         #print("Basis Change (tip to sample) with GPU: {} seconds".format(GPU_elapsed))
         #print("Speedup: {}".format(unopt_elapsed/GPU_elapsed))
-        U = d_U.copy_to_host()
         #U = ChangeBasis(tip_eigenbasis, self.use_eigfuncs, self.xs, self.ys)
         #plt.figure();plt.imshow(U);plt.show();
         #U_inv = np.linalg.inv(U)
         U_inv = U.T
-        result = np.dot(U,np.dot(self.D,U_inv))
+        print('U shape: {}\nU_inv shape: {}'.format(U.shape,U_inv.shape))
+        result = np.dot(U.T,np.dot(self.D,U))
+        time.sleep(1)
         return result
 
     def __call__(self,excitations,U,tip_eigenbasis):
