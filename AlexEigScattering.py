@@ -236,8 +236,8 @@ class SampleResponse(object):
         #plt.figure();plt.imshow(U);plt.show();
         #U_inv = np.linalg.inv(U)
         U_inv = U.T
-        print('U shape: {}\nU_inv shape: {}'.format(U.shape,U_inv.shape))
-        result = np.dot(U.T,np.dot(self.D,U))
+        #print('U shape: {}\nU_inv shape: {}'.format(U.shape,U_inv.shape))
+        result = np.dot(U,np.dot(self.D,U.T))
         time.sleep(1)
         return result
 
@@ -375,7 +375,7 @@ def TestScatteringBasisChange(q=20,\
             tip_eigenbasis=Jmaker.GetTipEigenbasis(x0,y0)
             Responder.GetRAlphaBeta(tip_eigenbasis)
             elapsed = time.time()-start
-            print('Time elapsed per loop: {} s'.format(elapsed))
+            #print('Time elapsed per loop: {} s'.format(elapsed))
             last = Progress(i,len(xs),last)
 
     return output

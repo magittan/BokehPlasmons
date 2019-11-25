@@ -37,8 +37,23 @@ def ChangeBasisCPU(to_eigenbasis,from_eigenbasis,xs,ys):
             U[to_n,from_n] = sum
     return U
 
+def ChangeBasisGPU(to_eigenbasis,from_eigenbasis,xs,ys):
+    TPB = 16
+    threadsperblock = (TPB,TPB)
+
+    N_to_eigfunc = len(to_eigenbasis)
+    N_from_eigfunc = len(from_eigenbasis)
+    blockspergrid_x = int(math.ceil(N_to_eigfunc/threadsperblock[0]))
+    blockspergrid_y = int(math.ceil(N_from_eigfunc/threadsperblock[0]))
+    blockspergrid = (blockspergrid_x,blockspergrid_y)
+    d_to_eigenbasis = cuda.to_device(np.ascontiguousarray(to_eigenbasis))
+    d_from_eigenbasis = cuda.to_device(np.ascontiguousarray(from_eigenbasis))
+    d_U = cuda.device_array((N_to_eigfunc,N_from_eigfunc))
+    _ChangeBasisGPU[blockspergrid,threadsperblock](d_U,d_to_eigenbasis,d_from_eigenbasis,xs,ys)
+    return d_U.copy_to_host()
+
 @cuda.jit
-def ChangeBasisGPU(U, to_eigenbasis,from_eigenbasis,xs,ys):
+def _ChangeBasisGPU(U, to_eigenbasis,from_eigenbasis,xs,ys):
     row, col = cuda.grid(2)
     dx = xs[1]-xs[0]
     dy = ys[1]-ys[0]
@@ -52,8 +67,6 @@ def ChangeBasisGPU(U, to_eigenbasis,from_eigenbasis,xs,ys):
                 sum += from_ef[i,j]*to_ef[i,j]*dx*dy
         cuda.syncthreads()
         U[row,col] = sum
-        #U.append(row)
-    #return U
 
 def TestBasisChange(U,from_eigenbasis,to_eigenbasis):
     from_v = OneHot(0,U.shape[1])+OneHot(1,U.shape[1])+OneHot(2,U.shape[1])
