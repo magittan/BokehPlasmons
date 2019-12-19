@@ -264,7 +264,7 @@ class SampleResponse(object):
         return AWA(result,axes=[None,self.xs,self.ys]).squeeze(), AWA(projected_result,axes=[None,self.xs,self.ys]).squeeze()
 
 #--- Example functions
-def load_eigpairs():
+def load_eigpairs(eigpair_fname):
     """Are eigenvalues correct?? They seem to be for Laplace operator on mesh of 0-101 range.
 
     Normalization by sum always ensures that integration will be like summing, which is
@@ -273,7 +273,7 @@ def load_eigpairs():
     global eigpairs
     eigpairs = dict()
 
-    path=os.path.join(basedir,"UnitSquareMesh_100x100_1000_eigenbasis.h5")
+    path=os.path.join(basedir,eigpair_fname)
 
     with h5py.File(path,'r') as f:
         for key in list(f.keys()):
@@ -375,7 +375,7 @@ def TestScatteringBasisChange(q=20,\
             tip_eigenbasis=Jmaker.GetTipEigenbasis(x0,y0)
             Responder.GetRAlphaBeta(tip_eigenbasis)
             elapsed = time.time()-start
-            #print('Time elapsed per loop: {} s'.format(elapsed))
+            print('Time elapsed per loop: {} s'.format(elapsed))
             last = Progress(i,len(xs),last)
 
     return output
