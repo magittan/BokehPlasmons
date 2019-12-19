@@ -19,7 +19,7 @@ def ChangeBasis(to_eigenbasis,from_eigenbasis,xs,ys):
             sum = np.trapz(np.trapz(dot_prod,ys),xs)
             #sum = nquad(lambda x,y: IntFun(dot_prod,x,y),[[-1,1],[-1,1]])
             U[to_n,from_n] = sum
-            last = Progress(to_n*from_n, N, last)
+            #last = Progress(to_n*from_n, N, last)
     return U
 
 @jit

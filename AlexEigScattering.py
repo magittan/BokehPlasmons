@@ -49,26 +49,6 @@ def ChangeBasis(to_eigenbasis,from_eigenbasis,xs,ys):
             #last = Progress(to_n*from_n, N, last)
     return U
 
-"""
-@cuda.jit
-def ChangeBasisGPU(U, to_eigenbasis,from_eigenbasis,xs,ys):
-    row, col = cuda.grid(2)
-    dx = xs[1]-xs[0]
-    dy = ys[1]-ys[0]
-    sx, sy = to_eigenbasis[0].shape
-    if row < U.shape[0] and col < U.shape[1]:
-        sum = 0.
-        to_ef = to_eigenbasis[row]
-        from_ef = from_eigenbasis[col]
-        for i in range(from_ef.shape[0]):
-            for j in range(from_ef.shape[1]):
-                sum += from_ef[i,j]*to_ef[i,j]*dx*dy
-        cuda.syncthreads()
-        U[row,col] = sum
-        #U.append(row)
-    #return U
-"""
-
 class BesselGenerator(object):
     """
     Generator of Bessel functions placed at arbitrary "center" position
@@ -228,7 +208,8 @@ class SampleResponse(object):
 
     def GetRAlphaBeta(self, tip_eigenbasis):
         #start = time.time()
-        U = BCT.ChangeBasisGPU(tip_eigenbasis,self.use_eigfuncs,self.xs,self.ys)
+        U = BCT.ChangeBasis(tip_eigenbasis,self.use_eigfuncs,self.xs,self.ys)
+        #U = BCT.ChangeBasisGPU(tip_eigenbasis,self.use_eigfuncs,self.xs,self.ys)
         #GPU_elapsed = time.time()-start
         #print("Basis Change (tip to sample) with GPU: {} seconds".format(GPU_elapsed))
         #print("Speedup: {}".format(unopt_elapsed/GPU_elapsed))
@@ -238,7 +219,6 @@ class SampleResponse(object):
         U_inv = U.T
         #print('U shape: {}\nU_inv shape: {}'.format(U.shape,U_inv.shape))
         result = np.dot(U,np.dot(self.D,U.T))
-        time.sleep(1)
         return result
 
     def __call__(self,excitations,U,tip_eigenbasis):
@@ -368,14 +348,16 @@ def TestScatteringBasisChange(q=20,\
     Jmaker=BesselGenerator(q,xs=xs,ys=ys)
 
     last = 0
+    elapsed = time.time()-start
     for i,x0 in enumerate(xs):
         for j,y0 in enumerate(ys):
-            print(i,j)
             start = time.time()
             tip_eigenbasis=Jmaker.GetTipEigenbasis(x0,y0)
-            Responder.GetRAlphaBeta(tip_eigenbasis)
-            elapsed = time.time()-start
-            print('Time elapsed per loop: {} s'.format(elapsed))
+            R_alphabeta = Responder.GetRAlphaBeta(tip_eigenbasis)
+            print(R_alphabeta.shape)
+            Pz = np.diag(np.ones(R_alphabeta.shape[0]))
+            print(Pz)
+
             last = Progress(i,len(xs),last)
 
     return output
