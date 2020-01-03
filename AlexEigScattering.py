@@ -238,7 +238,7 @@ class SampleResponse(object):
         U_inv = U.T
         #print('U shape: {}\nU_inv shape: {}'.format(U.shape,U_inv.shape))
         result = np.dot(U,np.dot(self.D,U.T))
-        time.sleep(1)
+        #time.sleep(0.1)
         return result
 
     def __call__(self,excitations,U,tip_eigenbasis):
@@ -368,14 +368,14 @@ def TestScatteringBasisChange(q=20,\
     Jmaker=BesselGenerator(q,xs=xs,ys=ys)
 
     last = 0
+    start = time.time()
     for i,x0 in enumerate(xs):
         for j,y0 in enumerate(ys):
-            print(i,j)
-            start = time.time()
+            #print(i,j)
             tip_eigenbasis=Jmaker.GetTipEigenbasis(x0,y0)
             Responder.GetRAlphaBeta(tip_eigenbasis)
-            elapsed = time.time()-start
-            print('Time elapsed per loop: {} s'.format(elapsed))
             last = Progress(i,len(xs),last)
+    elapsed = time.time()-start
+    print('Time to calculate RAlphaBeta for all (x,y): {} s'.format(elapsed))
 
-    return output
+    #return output
