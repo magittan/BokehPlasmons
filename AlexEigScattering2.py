@@ -3,8 +3,9 @@
 #from fenics import *
 #from mshr import *
 #TODO: check units of eigenvalues, with proper mesh spacing in Helmholtz solver
+
+import Plasmon_Modeling as PM
 import BasisChangeTest as BCT
-import Plasmon_Modeling as PM
 import CoulombKernel as CK
 import os,time, h5py
 basedir=os.path.dirname(__file__)
