@@ -7,30 +7,31 @@ import numpy as np
 import h5py, time, os, argparse
 
 def set_parser():
-    parser = argparse.ArgumentParser(description = "Generate an HDF5 containing sample eigenbasis for a unit square configuration produced by solving the homogeneous Helmholtz equation.")
-    parser.add_argument('--density', type=int,\
+    parser = argparse.ArgumentParser(description = "Generate an HDF5 containing sample eigenbasis for a unit square configuration produced by solving the homogeneous Helmholtz equation.",\
+                                    formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser.add_argument('--density', type=int, default=100,\
                             help="integer specifying the mesh density on x- and y- axes")
-    parser.add_argument('--eigenvalue', type=float,\
+    parser.add_argument('--eigenvalue', type=float, default=5,\
                             help="float specifying the aiming eigenvalue")
-    parser.add_argument('--n_extracted', type=int,\
+    parser.add_argument('--n_extracted', type=int, default=10,\
                             help="number of eigenfunctions to be extracted")
-    parser.add_argument('--wavelength', type=float,\
+    parser.add_argument('--wavelength', type=float, default=1,\
                             help="wavelength of the plasmon")
-    parser.add_argument('--L', type=float,\
+    parser.add_argument('--L', type=float, default=40,\
                             help="propagation length of the plasmon")
     return parser
 
 def main():
     parser = set_parser()
     args = parser.parse_args()
-    datadir = '../sample_eigenbasis_data'
+    datadir = './sample_eigenbasis_data'
     show = False
 
-    wavelength = 1 if args.wavelength==None else args.wavelength
-    L = 40 if args.L==None else args.L
-    density = 100 if args.density==None else args.density
-    eigenvalue = 5 if args.eigenvalue==None else args.eigenvalue
-    n_extracted = 10 if args.n_extracted==None else args.n_extracted
+    wavelength = args.wavelength
+    L = args.L
+    density = args.density
+    eigenvalue = args.eigenvalue
+    n_extracted = args.n_extracted
 
     sigma = PM.S()
     sigma.set_sigma_values(wavelength,L)
@@ -51,7 +52,7 @@ def main():
 
     fname = os.path.join(datadir, "UnitSquareMesh_{}x{}_{}_eigenbasis.h5".format(density,density,n_extracted))
 
-    with h5py.File(fname,'a') as f:
+    with h5py.File(fname,'w') as f:
         for key, value in processed_eigenvalue_eigenfunction_pairs.items():
             f[str(key)] = np.array(value)
 
