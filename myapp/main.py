@@ -308,10 +308,12 @@ output_display = figure(title='Display',
 
 # Labels
 updates_pretext = PreText(text='Update Section', width=300)
-circular_pretext = PreText(text='Circular Reflectors/Sources', width=300)
-rectangular_pretext =  PreText(text='Rectangular Reflectors/Sources', width=300)
-rotation_pretext =  PreText(text='Rotation (Degrees)', width=300)
-simulation_params_pretext =  PreText(text='Rotation (Degrees)', width=300)
+#circular_pretext = PreText(text='Circular Reflectors/Sources', width=300)
+#rectangular_pretext =  PreText(text='Rectangular Reflectors/Sources', width=300)
+circular_pretext =  Div(text='Circular Reflectors/Sources', style={"font-family": "Arial", "font-size": "15px"}, width=300)
+rectangular_pretext =  Div(text='Rectangular Reflectors/Sources', style={"font-family": "Arial", "font-size": "15px"}, width=300)
+#rotation_pretext =  PreText(text='Rotation (Degrees)', width=300)
+#simulation_params_pretext =  PreText(text='Rotation (Degrees)', width=300)
 
 # Sliders
 circular_radius = Slider(title = 'Radius',value = 2, start = 1, end = 10, step = 1,width=200)
@@ -325,8 +327,8 @@ mesh_height_input = TextInput(value='50', title='Mesh Height', width=100)
 quality_factor_input = TextInput(value='100', title='Quality Factor', width=100)
 plasmon_wavelength_input = TextInput(value='4', title='Plasmon Wavelength', width=100)
 mesh_density_input = TextInput(value='100', title='Mesh Density',width=200)
-lambda_input = TextInput(value='1', title='Dirichlet Lambda',width=100)
-phi_input = TextInput(value='90', title='Dirichlet Phi',width=100)
+lambda_input = TextInput(value='100', title='Excitation '+u"\u03BB",width=100)
+phi_input = TextInput(value='90', title='Excitation '+u"\u03B8",width=100)
 
 # Buttons
 undo_button = Button(label='Undo Last Placement', width = 200)
@@ -376,7 +378,7 @@ mesh_params_display = row(spacer,column(row(mesh_width_input,mesh_height_input),
 toggle_button_display = row(spacer,column(undo_button, toggle_source_reflector,toggle_circle_rectangle),spacer, width = 300)
 circular_slider_display = column(circular_pretext,circular_radius)
 rectangular_slider_display = column(rectangular_pretext, rectangular_width, rectangular_height)
-rotation_display = column(rotation_pretext,rotation)
+rotation_display = column(rotation)
 simulation_params_display = row(spacer,quality_factor_input,plasmon_wavelength_input,spacer)
 dirichlet_params_display = row(spacer,lambda_input, phi_input,spacer)
 button_display = row(reset_button,run_button)
@@ -384,7 +386,9 @@ right_display_column_elements = [
     mesh_params_display,
     Div(width = 300, height = 1, background = '#000000'),
     toggle_button_display,
+    Div(width = 300, height = 1, background = '#000000'),
     circular_slider_display,
+    Div(width = 300, height = 1, background = '#000000'),
     rectangular_slider_display,
     rotation_display,
     Div(width = 300, height = 1, background = '#000000'),
@@ -392,7 +396,7 @@ right_display_column_elements = [
     dirichlet_params_display,
     plot_value_dropdown,
     button_display,
-    test_url_button,
+    #test_url_button,
     Div(width = 300, height = 1, background = '#000000'),
     updates_pretext
 ]
