@@ -102,7 +102,7 @@ def UpdateUpdates(input_string):
     update_messages.append(input_string)
     update_message = update_section_title
     for message in update_messages[-7:]:
-        update_message+='\n'
+        update_message+="<br>"
         update_message+=message
     updates_pretext.text = str(update_message)
 
@@ -156,7 +156,6 @@ def TestURLCallback(event):
     with open('./myapp/static/test1.dat','w+') as f:
         f.write('test\ntest test\n')
     url = 'localhost:5006/myapp/static/test1.dat'
-
 
 #--Setting Variables----#
 
@@ -296,22 +295,23 @@ p_source = ColumnDataSource(data=dict(x=[],y=[]))
 p_reflector = ColumnDataSource(data=dict(x=[],y=[]))
 
 # Update message section
-update_section_title = 'Update Section'
+update_section_title = 'Computation Updates'
 update_messages = []
 
 # Displays
 clickable_display = figure(title='Double click to leave a dot.',
            tools='tap,reset',
            x_range=(0, x_bound), y_range=(0, y_bound))
-output_display = figure(title='Display',
+output_display = figure(title='Sample Response Display',
     x_range=(0, x_bound), y_range=(0, y_bound), tools='wheel_zoom,box_select,save,reset')
 
 # Labels
-updates_pretext = PreText(text='Update Section', width=300)
-#circular_pretext = PreText(text='Circular Reflectors/Sources', width=300)
-#rectangular_pretext =  PreText(text='Rectangular Reflectors/Sources', width=300)
+updates_pretext =  Div(text='Comptuation Updates', style={"font-family": "Arial", "font-size": "15px"}, width=300)
 circular_pretext =  Div(text='Circular Reflectors/Sources', style={"font-family": "Arial", "font-size": "15px"}, width=300)
 rectangular_pretext =  Div(text='Rectangular Reflectors/Sources', style={"font-family": "Arial", "font-size": "15px"}, width=300)
+#updates_pretext = PreText(text='Update Section', width=300)
+#circular_pretext = PreText(text='Circular Reflectors/Sources', width=300)
+#rectangular_pretext =  PreText(text='Rectangular Reflectors/Sources', width=300)
 #rotation_pretext =  PreText(text='Rotation (Degrees)', width=300)
 #simulation_params_pretext =  PreText(text='Rotation (Degrees)', width=300)
 
@@ -319,16 +319,16 @@ rectangular_pretext =  Div(text='Rectangular Reflectors/Sources', style={"font-f
 circular_radius = Slider(title = 'Radius',value = 2, start = 1, end = 10, step = 1,width=200)
 rectangular_width = Slider(title = 'Width',value = 8, start = 1, end = 10, step = 1,width=200)
 rectangular_height = Slider(title = 'Height',value = 2, start = 1, end = 10, step = 1,width=200)
-rotation = Slider(title = 'Rotation (Degrees)',value = 0, start = 0, end = 360, step = 15,width=200)
+rotation = Slider(title = 'Rotation'+' ('+u"\u00B0"+')',value = 0, start = 0, end = 360, step = 15,width=200)
 
 # Text Input
 mesh_width_input = TextInput(value='50', title='Mesh Width', width=100)
 mesh_height_input = TextInput(value='50', title='Mesh Height', width=100)
-quality_factor_input = TextInput(value='100', title='Quality Factor', width=100)
-plasmon_wavelength_input = TextInput(value='4', title='Plasmon Wavelength', width=100)
+quality_factor_input = TextInput(value='100', title='Plasmon Q', width=100)
+plasmon_wavelength_input = TextInput(value='4', title='Plasmon '+u"\u03BB", width=100)
 mesh_density_input = TextInput(value='100', title='Mesh Density',width=200)
 lambda_input = TextInput(value='100', title='Excitation '+u"\u03BB",width=100)
-phi_input = TextInput(value='90', title='Excitation '+u"\u03B8",width=100)
+phi_input = TextInput(value='90', title='Excitation '+u"\u03B8"+' ('+u"\u00B0"+')',width=100)
 
 # Buttons
 undo_button = Button(label='Undo Last Placement', width = 200)

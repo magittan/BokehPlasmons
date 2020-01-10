@@ -221,7 +221,7 @@ class RectangularSample(object):
         self.domain.set_subdomain(self.number_of_objects, rec)
 
     #the position placement is dependent on the bottom left hand corner
-    def placeRectangularReflector(self,x_pos,y_pos,width, height):
+    def placeRectangularReflector(self,x_pos,y_pos,width, height, angle):
         """Places a rectangular reflector, a rectangular region with neumann boundary conditions, at a specified
            coordinate position on the sample. The x_pos and y_pos arguments specify the position of the bottom
            left corner of the rectangular reflector.
@@ -236,8 +236,28 @@ class RectangularSample(object):
             None
 
         """
-        rec = Rectangle(Point(x_pos, y_pos),
-                    Point(x_pos+width, y_pos+height))
+        c,s = np.cos(angle), np.sin(angle)
+        rotation_matrix = np.array(((c,-s),(s,c)))
+        angle_deg = (180/np.pi)*angle
+
+        center = np.array((x_pos+width/2,y_pos+height/2))
+        bottom_left = np.array((x_pos,y_pos))
+        bottom_right = np.array((x_pos+width,y_pos))
+        top_right = np.array((x_pos+width,y_pos+height))
+        top_left = np.array((x_pos,y_pos+height))
+
+        rotated_bottom_left = rotation_matrix.dot(bottom_left-center)+center
+        rotated_bottom_right = rotation_matrix.dot(bottom_right-center)+center
+        rotated_top_right = rotation_matrix.dot(top_right-center)+center
+        rotated_top_left = rotation_matrix.dot(top_left-center)+center
+        #rec = Rectangle(Point(x_pos,y_pos),
+        #            Point(x_pos+width, y_pos+height))
+        P1 = Point(list(rotated_bottom_left))
+        P2 = Point(list(rotated_bottom_right))
+        P3 = Point(list(rotated_top_right))
+        P4 = Point(list(rotated_top_left))
+        rec = Polygon((P1,P2,P3,P4))
+        #rec = Rectangle(Point(x_pos, y_pos),Point(x_pos+width, y_pos+height))
         self.domain-=rec
 
     def placePolygonalSource(self, vertices):
@@ -741,18 +761,25 @@ class O(object):
 
 #-------------------------------------------------------------------------------------------------------------------------------#
 
-class equationPhraser(object):
-    """Working on it, will phrase the parameters for solving the plasmon wave equation as a specific eigenvalue for solving the
-       eigenvalue problem on the helmholtz solver.
-
-    """
-
-    def set_values(self,eigenval):
-        pass
-        #Need some parameters to specify
-
-#--------------------------------------------------------------------------------------------------------------------------------#
 #Additional Fenics Functions
+def fenics_func_to_AWA(input_function, input_mesh):
+    """
+    Can be used in order to cast Fenics Functions into AWA objects for further processing. Currently running into a snafu.
+    """
+    V = FunctionSpace(input_mesh, 'Lagrange', 3)
+
+    input_function.set_allow_extrapolation(True)
+    Pv = interpolate(input_function,V)
+
+    V2 = FunctionSpace(input_mesh, 'CG', 1)
+    u0 = interpolate(Pv, V2)
+    # u1 = interpolate(Pv.split(deepcopy=True)[1], V2)
+
+    BF0 = FT.BoxField2(u0)
+    # BF1 = FT.BoxField2(u1)
+
+    return BF0.to_AWA()
+
 def mesh2triang(mesh):
     xy = mesh.coordinates()
     return tri.Triangulation(xy[:, 0], xy[:, 1], mesh.cells())
@@ -801,7 +828,7 @@ def plot_fenics(z):
         left = False,
         top=False,         # ticks along the top edge are off
         labelleft=False);
-#     cax = make_axes_locatable(plt.gca()).append_axes("right", size="5%", pad=0.05);plt.colorbar(cax=cax);plt.clim(-r_lim,r_lim)
+    #cax = make_axes_locatable(plt.gca()).append_axes("right", size="5%", pad=0.05);plt.colorbar(cax=cax);plt.clim(-r_lim,r_lim)
 
 
     imaginary = z.split(deepcopy=True)[1]
