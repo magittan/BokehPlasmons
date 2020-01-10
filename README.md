@@ -7,9 +7,9 @@ The underlying theory for this implementation can be found [here](../blob/master
 
 # Installation & Setup
 Use of a conda environment specifically built for this application is highly recommended. Assuming conda has been installed, the following command will set up the environment:
-'''console
+```console
 user@host:~$ conda create -n fenicsproject -c conda-forge fenics=2018 mshr=2018 matplotlib scipy h5py numba
-'''
+```
 
 # Serving the Application
 bokeh serve --show myapp
