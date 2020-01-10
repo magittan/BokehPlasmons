@@ -4,7 +4,7 @@ from bokeh.layouts import column, row, widgetbox, gridplot
 from bokeh.models import CustomJS,ColumnDataSource, Column, Button, ContinuousColorMapper, BasicTicker, ColorBar, OpenURL
 from bokeh.models.widgets import PreText, RadioButtonGroup, TextInput, Slider, Div, Dropdown
 from bokeh.plotting import figure, show
-import Plasmon_Modeling as PM
+import PlasmonModeling as PM
 import PlacedObjects as PO
 import numpy as np
 
