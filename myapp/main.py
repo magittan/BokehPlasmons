@@ -300,11 +300,18 @@ update_section_title = 'Update Section'
 update_messages = []
 
 # Displays
-clickable_display = figure(title='Double click to leave a dot.',
+clickable_display = figure(title='Double click to place source/reflector.',
            tools='tap,reset',
-           x_range=(0, x_bound), y_range=(0, y_bound))
-output_display = figure(title='Display',
-    x_range=(0, x_bound), y_range=(0, y_bound), tools='wheel_zoom,box_select,save,reset')
+           x_range=(0, x_bound), y_range=(0, y_bound),
+           x_axis_label = "x [mesh units]", y_axis_label = "y [mesh units]")
+output_display = figure(title='Sample Response Display',
+            tools='wheel_zoom,box_select,save,reset',
+            x_range=(0, x_bound), y_range=(0, y_bound),
+            x_axis_label = "x [mesh units]", y_axis_label = "y [mesh units]")
+clickable_display.xaxis.axis_label_text_font_style = "normal"
+clickable_display.yaxis.axis_label_text_font_style = "normal"
+output_display.xaxis.axis_label_text_font_style = "normal"
+output_display.yaxis.axis_label_text_font_style = "normal"
 
 # Labels
 updates_pretext = PreText(text='Update Section', width=300)
@@ -324,8 +331,8 @@ rotation = Slider(title = 'Rotation (Degrees)',value = 0, start = 0, end = 360, 
 # Text Input
 mesh_width_input = TextInput(value='50', title='Mesh Width', width=100)
 mesh_height_input = TextInput(value='50', title='Mesh Height', width=100)
-quality_factor_input = TextInput(value='100', title='Quality Factor', width=100)
-plasmon_wavelength_input = TextInput(value='4', title='Plasmon Wavelength', width=100)
+quality_factor_input = TextInput(value='100', title='Plasmon Q', width=100)
+plasmon_wavelength_input = TextInput(value='4', title='Plasmon '+u"\u03BB", width=100)
 mesh_density_input = TextInput(value='100', title='Mesh Density',width=200)
 lambda_input = TextInput(value='100', title='Excitation '+u"\u03BB",width=100)
 phi_input = TextInput(value='90', title='Excitation '+u"\u03B8",width=100)
