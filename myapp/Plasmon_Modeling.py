@@ -221,7 +221,7 @@ class RectangularSample(object):
         self.domain.set_subdomain(self.number_of_objects, rec)
 
     #the position placement is dependent on the bottom left hand corner
-    def placeRectangularReflector(self,x_pos,y_pos,width, height):
+    def placeRectangularReflector(self,x_pos,y_pos,width, height, angle):
         """Places a rectangular reflector, a rectangular region with neumann boundary conditions, at a specified
            coordinate position on the sample. The x_pos and y_pos arguments specify the position of the bottom
            left corner of the rectangular reflector.
@@ -236,8 +236,30 @@ class RectangularSample(object):
             None
 
         """
-        rec = Rectangle(Point(x_pos, y_pos),
-                    Point(x_pos+width, y_pos+height))
+        self.number_of_objects += 1
+        c,s = np.cos(angle), np.sin(angle)
+        rotation_matrix = np.array(((c,-s),(s,c)))
+        angle_deg = (180/np.pi)*angle
+
+        center = np.array((x_pos+width/2,y_pos+height/2))
+        bottom_left = np.array((x_pos,y_pos))
+        bottom_right = np.array((x_pos+width,y_pos))
+        top_right = np.array((x_pos+width,y_pos+height))
+        top_left = np.array((x_pos,y_pos+height))
+
+        rotated_bottom_left = rotation_matrix.dot(bottom_left-center)+center
+        rotated_bottom_right = rotation_matrix.dot(bottom_right-center)+center
+        rotated_top_right = rotation_matrix.dot(top_right-center)+center
+        rotated_top_left = rotation_matrix.dot(top_left-center)+center
+        #rec = Rectangle(Point(x_pos,y_pos),
+        #            Point(x_pos+width, y_pos+height))
+        P1 = Point(list(rotated_bottom_left))
+        P2 = Point(list(rotated_bottom_right))
+        P3 = Point(list(rotated_top_right))
+        P4 = Point(list(rotated_top_left))
+        rec = Polygon((P1,P2,P3,P4))
+        #rec = Rectangle(Point(x_pos, y_pos),
+        #            Point(x_pos+width, y_pos+height))
         self.domain-=rec
 
     def placePolygonalSource(self, vertices):
