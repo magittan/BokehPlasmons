@@ -273,9 +273,20 @@ def SimulateModel(in_objectList):
     #output_display.image(plot_value_dropdown.value,source=display_data,x=0,y=0,dw=w,dh=h, palette='Viridis256')
 
 def GenerateMesh():
+    _GenerateMesh(objectList)
+
+def _GenerateMesh(ol):
     w = int(mesh_width_input.value)
     h = int(mesh_height_input.value)
+    r_a_r = QueryObjectList('Reflector','Rectangle',ol)
+    c_a_r = QueryObjectList('Reflector', 'Circle', ol)
     mesh_sample = PM.RectangularSample(w,h)
+    for i in c_a_r:
+        mesh_sample.placeCircularReflector(i.get_x_coord(),i.get_y_coord(),i.get_radius())
+
+    for i in r_a_r:
+        mesh_sample.placeRectangularReflector(i.get_x_coord(), i.get_y_coord(), i.get_width(), i.get_height(), i.get_angle())
+
     density = int(mesh_density_input.value)
     mesh_sample.getMesh(density = density, to_plot=True)
 
