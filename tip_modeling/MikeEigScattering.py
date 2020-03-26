@@ -1,30 +1,20 @@
-import os,h5py
+import os,h5py,time
+import Plasmon_Modeling as PM
+import multiprocessing as mp
 import numpy as np
 from scipy import special as sp
+from common import numerical_recipes as numrec
 from common.baseclasses import ArrayWithAxes as AWA
 import matplotlib.pyplot as plt
-import Plasmon_Modeling as PM
+from itertools import product
+from Utils import Progress, load_eigpairs
+
+def Calc(psi,psi_star):
+    return np.sum(psi_star*myQC(psi))
 
 def mybessel(A,v,Q,x,y):
     r = np.sqrt(x**2+y**2)
     return A*sp.jv(v,Q*r)
-
-def load_eigpairs(basedir=os.path.dirname("./"),eigpair_fname="UnitSquareMesh_100x100_1000_eigenbasis.h5"):
-    """Normalization by sum always ensures that integration will be like summing, which is
-    much simpler than keeping track of dx, dy..."""
-
-    global eigpairs
-    eigpairs = dict()
-
-    path=os.path.join(basedir,eigpair_fname)
-
-    with h5py.File(path,'r') as f:
-        for key in list(f.keys()):
-            eigfunc=np.array(f.get(key))
-            eigfunc/=np.sqrt(np.sum(np.abs(eigfunc)**2))
-            eigpairs[float(key)] = AWA(eigfunc,\
-                                       axes=[np.linspace(0,1,eigfunc.shape[0]),\
-                                             np.linspace(0,1,eigfunc.shape[1])])
 
 class Translator:
     """
@@ -81,13 +71,13 @@ class TipResponse:
         Can output the tip eigenbases and the excitation functions
     """
 
-    def __init__(self, q=20, N_tip_eigenbasis=5):
-        self.q = 20
+    def __init__(self,xs=np.linspace(-1,1,101), ys=np.linspace(-1,1,101), q=20, N_tip_eigenbasis=5):
+        self.q = q
         self.N_tip_eigenbasis = N_tip_eigenbasis
 
-        self.eigenbasis_translators = self._SetEigenbasisTranslators()
+        self.eigenbasis_translators = self._SetEigenbasisTranslators(xs,ys)
 
-    def _SetEigenbasisTranslators(self,xs=np.linspace(-1,1,101), ys=np.linspace(-1,1,101)):
+    def _SetEigenbasisTranslators(self,xs,ys):
         tip_eb = []
         N = self.N_tip_eigenbasis
         for n in range(N):
@@ -170,7 +160,7 @@ class SampleResponse:
             TODO: I hacked this together in some crazy way to force multiprocessing.Pool to work...
                     Needs to be understood and fixed
         """
-        if debug: print('Setting Kernel')
+        if self.debug: print('Setting Kernel')
         self.V_nm = np.zeros([len(self.use_eigvals), len(self.use_eigvals)])
         eigfuncs = self.use_eigfuncs
         kern_func = lambda x,y: 1/np.sqrt(x**2+y**2+1e-4)
@@ -182,7 +172,7 @@ class SampleResponse:
         self.V_nm = np.array(p.starmap(Calc,product(eigfuncs,eigfuncs))).reshape((self.N,self.N))
 
     def _SetScatteringMatrix(self):
-        if debug: print('Setting Scattering Matrix')
+        if self.debug: print('Setting Scattering Matrix')
         self.D = self.E*np.linalg.inv(self.E*np.identity(self.Q.shape[0]) - self.alpha*self.Q.dot(self.V_nm))
 
     def GetRAlphaBeta(self,tip_eigenbasis):
@@ -223,7 +213,7 @@ def TestScatteringBasisChange(q=44,\
 
     Responder = SampleResponse(eigpairs,E=E,N=N_sample_eigenbasis)
     xs,ys = Responder.xs,Responder.ys
-    Tip = TipResponse()
+    Tip = TipResponse(xs,ys,q=q,N_tip_eigenbasis=N_tip_eigenbasis)
 
     betaz_alpha = np.diag((2-.1j)*(np.arange(N_tip_eigenbasis)+1))
     Lambdaz_beta = ((1+np.arange(N_tip_eigenbasis))[::-1])
@@ -236,15 +226,21 @@ def TestScatteringBasisChange(q=44,\
             start = time.time()
             tip_eigenbasis = Tip(x0,y0)
             R_alphabeta = Responder.GetRAlphaBeta(tip_eigenbasis)
-            if i==0 and j==0:
-                plt.figure()
-                plt.imshow(np.abs(R_alphabeta))
-                plt.show()
+            #if i==0 and j==0:
+            #    plt.figure()
+            #    plt.imshow(np.abs(R_alphabeta))
+            #    plt.show()
             Ps[i,j] = np.sum(np.linalg.inv(betaz_alpha-R_alphabeta).dot(Lambdaz_beta))
             Rs[i,j] = np.sum(np.diag(R_alphabeta))/N_tip_eigenbasis
-            last = AES.Progress(i,len(xs),last)
+            last = Progress(i,len(xs),last)
 
     return {'P':Ps,'R':Rs}
 
-load_eigpairs(basedir="/home/meberko/Projects/BokehPlasmons/sample_eigenbasis_data")
-TestScatteringBasisChange()
+global eigpairs
+eigpairs = load_eigpairs(basedir="/home/meberko/Projects/BokehPlasmons/sample_eigenbasis_data")
+d=TestScatteringBasisChange(q=44,N_tip_eigenbasis=1)
+plt.figure()
+plt.imshow(np.abs(d['P'])); plt.title('P');plt.colorbar()
+plt.figure()
+plt.imshow(np.abs(d['R'])); plt.title('R');plt.colorbar()
+plt.show()
