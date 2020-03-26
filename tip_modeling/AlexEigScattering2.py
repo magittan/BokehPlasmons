@@ -81,8 +81,7 @@ def ChangeBasisASM2(to_eigenbasis,from_eigenbasis,xs,ys):
 
     return U
 
-
-class BesselGenerator(object):
+class BesselGenerator:
     """
     Generator of Bessel functions placed at arbitrary "center" position
     within an xy mesh space.  Works by generating a bessel function on
@@ -108,15 +107,15 @@ class BesselGenerator(object):
         xs2grid,ys2grid=np.ogrid[-self.dx:+self.dx:bigshape[0]*1j,
                                  -self.dy:+self.dy:bigshape[1]*1j]
         self.xs2=xs2grid.squeeze()
-        self.ys2=ys2grid.squeeze()
+        self.ys2=ys2grid.squeeze()
+        print(self.xs2)
+        print(self.ys2)
 
-        #J_zeros = sp.jn_zeros(0,N_tip_eigenbasis) #@ASM2019.12.21
         rs2 = np.sqrt(xs2grid**2+ys2grid**2)
-        #self.Jbasis = np.array([(2/sp.jv(1,J_zeros[n]))*sp.jv(0,J_zeros[n]*rs2) for n in range(N_tip_eigenbasis)])
+
         self.Jbasis = np.array([(2*q*(n+1)/(N_tip_eigenbasis+1))**2*np.exp(-2*(n+1)/(N_tip_eigenbasis+1))*sp.jv(0,(2*q*(n+1)/(N_tip_eigenbasis+1))*rs2) for n in range(N_tip_eigenbasis)]) #@ASM2019.12.21: here we're actually making some linearly independent basis set
 
         self.Jv = np.random.randint(0,high=5,size=N_tip_eigenbasis)
-        print('Excitation vector (in basis of J(n), n in [0,{}]):\n\t{}'.format(N_tip_eigenbasis,self.Jv))
 
         self.Jm = np.array([u*self.Jbasis[i] for i,u in enumerate(self.Jv)])
         self.bigJ=np.sum(self.Jm,axis=0)
@@ -320,8 +319,6 @@ def load_eigpairs(eigpair_fname):
             eigpairs[float(key)] = AWA(eigfunc,\
                                        axes=[np.linspace(0,1,eigfunc.shape[0]),\
                                              np.linspace(0,1,eigfunc.shape[1])])
-
-    #return eigpairs
 
 def scan_qs_at_E(qs=np.linspace(5,30,200),\
                  E=2000*np.exp(1j*2*np.pi*5e-2),\
