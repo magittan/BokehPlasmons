@@ -85,7 +85,7 @@ class TipResponse:
             exp_prefactor = np.exp(-2*(n+1)/(N+1))
             A = exp_prefactor*Q**2
 
-            func = lambda x,y: mybessel(A,0,Q,x,y)
+            func = lambda x,y: np.exp(np.sqrt(x**2+y**2))*mybessel(A,0,Q,x,y)
 
             tip_eb.append(Translator(xs=xs,ys=ys,f=func))
         return tip_eb
@@ -167,26 +167,31 @@ class SampleResponse:
                     Needs to be understood and fixed
         """
         if self.debug: print('Setting Kernel')
+        poorman = False
         self.V_nm = np.zeros([len(self.use_eigvals), len(self.use_eigvals)])
-        eigfuncs = self.use_eigfuncs
-        kern_func = lambda x,y: 1/np.sqrt(x**2+y**2+1e-4)
-        global myQC
-        size=(self.xs.max()-self.xs.min(),self.ys.max()-self.ys.min())
-        myQC=numrec.QuickConvolver(size=size,kernel_function=kern_func,\
-                                   shape=eigfuncs[0].shape,pad_by=.5,pad_with=0)
-        p = mp.Pool(8)
-        self.V_nm = np.array(p.starmap(Calc,product(eigfuncs,eigfuncs))).reshape((self.N,self.N))
+        if not poorman:
+            eigfuncs = self.use_eigfuncs
+            kern_func = lambda x,y: 1/np.sqrt(x**2+y**2+1e-4)
+            global myQC
+            size=(self.xs.max()-self.xs.min(),self.ys.max()-self.ys.min())
+            myQC=numrec.QuickConvolver(size=size,kernel_function=kern_func,\
+                                       shape=eigfuncs[0].shape,pad_by=.5,pad_with=0)
+            p = mp.Pool(8)
+            self.V_nm = np.array(p.starmap(Calc,product(eigfuncs,eigfuncs))).reshape((self.N,self.N))
+        else:
+            for i,v in enumerate(self.use_eigvals):
+                self.V_nm[i,i] = 1/np.sqrt(v)
 
     def _SetScatteringMatrix(self):
         if self.debug: print('Setting Scattering Matrix')
         self.D = self.E*np.linalg.inv(self.E*np.identity(self.Q.shape[0]) - self.alpha*self.Q.dot(self.V_nm))
 
     def GetRAlphaBeta(self,tip_eigenbasis):
-        t1=time.time()
         Psi=np.matrix([eigfunc.ravel() for eigfunc in tip_eigenbasis]) #Only have to unravel sample eigenfunctions once (twice speed-up)
         U=Psi*self.Phis.T
         U_inv = np.linalg.pinv(U) #@ASM2019.12.21 good to use inverse, since tip-basis may not be orthogonal
         result=np.dot(U,np.dot(self.D,U_inv))
+
         return result
 
     def __call__(self,excitations,U,tip_eigenbasis):
@@ -227,6 +232,7 @@ def TestScatteringBasisChange(q=44,\
     for i,x0 in enumerate(xs):
         for j,y0 in enumerate(ys):
             start = time.time()
+
             tip_eigenbasis = Tip(x0,y0)
             R_alphabeta = Responder.GetRAlphaBeta(tip_eigenbasis)
             Ps[i,j] = np.sum(np.linalg.inv(betaz_alpha-R_alphabeta).dot(Lambdaz_beta))
