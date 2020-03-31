@@ -16,6 +16,9 @@ def mybessel(A,v,Q,x,y):
     r = np.sqrt(x**2+y**2)
     return A*sp.jv(v,Q*r)
 
+def planewave(qx,qy,x,y):
+    return np.sin(qx*x+qy*y)
+
 class Translator:
     """
         Allows for the translation of the center point of functions within an xy mesh space.
@@ -241,15 +244,28 @@ def TestScatteringBasisChange(q=44,\
 
     return {'P':Ps,'R':Rs}
 
-
+show_eigs = True
+run_test = True
 global eigpairs
-eigpairs = load_eigpairs(basedir="/home/meberko/Projects/BokehPlasmons/sample_eigenbasis_data")
-"""
-r = SampleResponse(eigpairs,qw=44,N=1)
-"""
-d=TestScatteringBasisChange(q=44,N_tip_eigenbasis=1)
-plt.figure()
-plt.imshow(np.abs(d['P'])); plt.title('P');plt.colorbar()
-plt.figure()
-plt.imshow(np.abs(d['R'])); plt.title('R');plt.colorbar()
-plt.show()
+xs,ys = np.linspace(-1,1,101), np.linspace(-1,1,101)
+xv,yv = np.meshgrid(xs,ys)
+#eigpairs = load_eigpairs(basedir="../sample_eigenbasis_data")
+eigpairs = {}
+for n in range(1,300):
+    qx = np.pi*n
+    eigpairs[qx] = AWA(planewave(qx,0,xv,yv), axes = [xs,ys])
+if show_eigs:
+    for i,q in enumerate(list(eigpairs.keys())):
+        if i<5:
+            plt.figure()
+            plt.imshow(eigpairs[q])
+            plt.title("q={}".format(q))
+    plt.show()
+
+if run_test:
+    d=TestScatteringBasisChange(q=44,N_tip_eigenbasis=2)
+    plt.figure()
+    plt.imshow(np.abs(d['P'])); plt.title('P');plt.colorbar()
+    plt.figure()
+    plt.imshow(np.abs(d['R'])); plt.title('R');plt.colorbar()
+    plt.show()
