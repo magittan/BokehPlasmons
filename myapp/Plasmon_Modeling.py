@@ -527,7 +527,7 @@ class RectangularSample(object):
             u.vector()[:] = rx
             eigenvalues.append(r)
             eigenfunctions.append(u)
-            plt.figure(); plot(u,interactive=True); plt.title("Eigenvalue: {}".format(r))
+            plt.figure(); plot(u,interactive=True); plt.title("Eigenvalue: {}".format(r));plt.show()
 
         return dict(list(zip(eigenvalues,eigenfunctions)))
 

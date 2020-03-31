@@ -4,7 +4,8 @@ import numpy as np
 
 def main():
     sample = PM.RectangularSample(100,100)
-    sample.placeRectangularSource(0,10,5,10,0)
+    #sample.placeRectangularReflector(25.234234,25.345345,50,50,60)
+    sample.placeCircularReflector(50,50,20)
 
     sigma = PM.S()
     omega = PM.O()
@@ -13,7 +14,8 @@ def main():
     lam = float(10000)
     phi = float(90)*np.pi/180
 
-    sample.eigenvalue_target_solve(20,sigma,number_extracted = 5, to_plot = True, density = 100, _lam=lam, _phi=phi)
+    sample.getMesh(to_plot=True)
+    sample.eigenvalue_target_solve(2,sigma,number_extracted = 3, to_plot = True, density = 100)
     """
     sample.run(omega,sigma,density = int(100), _lam=lam,_phi=phi)
 
