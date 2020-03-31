@@ -247,7 +247,7 @@ def TestScatteringBasisChange(q=44,\
 
     return {'P':Ps,'R':Rs}
 
-show_eigs = False
+show_eigs = True
 run_test = True
 global eigpairs
 xs,ys = np.linspace(-1,1,101), np.linspace(-1,1,101)
