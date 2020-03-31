@@ -103,7 +103,7 @@ class SampleResponse:
         an input set of excitation functions.
     """
 
-    def __init__(self,eigpairs,E,N=100,debug=True):
+    def __init__(self,eigpairs,qw=44,N=100,debug=True):
         # Setting the easy stuff
         eigvals = list(eigpairs.keys())
         eigfuncs = list(eigpairs.values())
@@ -113,47 +113,53 @@ class SampleResponse:
                           axes=[eigvals,self.xs,self.ys]).sort_by_axes()
         self.eigvals = self.eigfuncs.axes[0]
         self.phishape = self.eigfuncs[0].shape
-        self.E = E
+        self.qw = qw
         self.N = N
+        sigma_1,sigma_2 = np.real(np.exp(2*np.pi*1j*0.05)), np.imag(np.exp(2*np.pi*1j*0.05))
+        #lambda_p, L_p = 10,10
 
         # Setting the various physical quantities
-        self._SetUseEigenvalues(E)
+        self._SetSigma(sigma_1, sigma_2)
         self._SetEnergy()
-        self._SetSigma(10,10)
+        self._SetUseEigenvalues()
         self._SetCoulombKernel()
         self._SetScatteringMatrix()
+
+    def _SetSigma(self,s1,s2):
+        if self.debug: print('Setting Sigma')
+
+        self.sigma = PM.S(s1,s2)
+        #self.sigma.set_sigma_values(lamb, L)
+        sigma_tilde = self.sigma.get_sigma_values()[0]+1j*self.sigma.get_sigma_values()[1]
+        self.alpha = sigma_tilde/np.abs(sigma_tilde)
+        if self.debug: print("\tsigma={}".format(sigma_tilde))
+
+        """
+            TODO: Do we need to change this? As of 2019.12.21, this was a placeholder
+        """
+        #self.alpha = 1 #@ASM2019.12.21 just for nwo we put the 'complexity' into input `E`, until we get serious about recasting it to `q_omega`
 
     def _SetEnergy(self):
         """
             TODO: check energy units and sqrt eigenvals
         """
         if self.debug: print('Setting Energy')
-        self.Phis=np.matrix([eigfunc.ravel() for eigfunc in self.use_eigfuncs])
-        self.Q = np.diag(self.use_eigvals)
+        self.E = self.qw*self.alpha
+        if self.debug: print("\tE={}".format(self.E))
 
-    def _SetUseEigenvalues(self, E):
+    def _SetUseEigenvalues(self):
         if self.debug: print('Setting Use Eigenvalues')
-        index=np.argmin(np.abs(np.sqrt(self.eigvals)-E)) #@ASM2019.12.22 - This is to treat `E` not as the squared eigenvalue, but in units of the eigenvalue (`q_omega)
+        index=np.argmin(np.abs(np.sqrt(self.eigvals)-self.E)) #@ASM2019.12.22 - This is to treat `E` not as the squared eigenvalue, but in units of the eigenvalue (`q_omega)
         ind1=np.max([index-self.N//2,0])
         ind2=ind1+self.N
         if ind2>len(self.eigfuncs):
             ind2 = len(self.eigfuncs)
             ind1 = ind2-self.N
+
         self.use_eigfuncs=self.eigfuncs[ind1:ind2]
         self.use_eigvals=self.eigvals[ind1:ind2]
-
-    def _SetSigma(self,L,lamb):
-        if self.debug: print('Setting Sigma')
-
-        self.sigma = PM.S()
-        self.sigma.set_sigma_values(lamb, L)
-        sigma_tilde = self.sigma.get_sigma_values()[0]+1j*self.sigma.get_sigma_values()[1]
-        self.alpha = -1j*sigma_tilde/np.abs(sigma_tilde)
-
-        """
-            TODO: Do we need to change this? As of 2019.12.21, this was a placeholder
-        """
-        self.alpha = 1 #@ASM2019.12.21 just for nwo we put the 'complexity' into input `E`, until we get serious about recasting it to `q_omega`
+        self.Phis=np.matrix([eigfunc.ravel() for eigfunc in self.use_eigfuncs])
+        self.Q = np.diag(self.use_eigvals)
 
     def _SetCoulombKernel(self):
         """
@@ -191,12 +197,7 @@ class SampleResponse:
                             np.dot(U,\
                                 np.dot(self.D,\
                                     np.dot(self.Phis,Exc.T))))
-        #plt.figure();plt.imshow(np.abs(result.reshape(101,101)));plt.show()
 
-        #These are all the matrices that get multiplied, take a look that shapes work...
-        #print([item.shape for item in [self.Phis.T,self.D,self.Phis,Exc.T]])
-        #result is in form of column vectors
-        #turn into row vectors then reshape
         result=np.dot(self.Phis.T,\
                        np.dot(self.D,\
                              np.dot(self.Phis,Exc.T)))
@@ -211,7 +212,7 @@ def TestScatteringBasisChange(q=44,\
 
     global Responder,Tip,R_alphabeta
 
-    Responder = SampleResponse(eigpairs,E=E,N=N_sample_eigenbasis)
+    Responder = SampleResponse(eigpairs,qw=q,N=N_sample_eigenbasis)
     xs,ys = Responder.xs,Responder.ys
     Tip = TipResponse(xs,ys,q=q,N_tip_eigenbasis=N_tip_eigenbasis)
 
@@ -221,23 +222,25 @@ def TestScatteringBasisChange(q=44,\
     Ps=np.zeros((len(xs),len(ys)))
     Rs=np.zeros((len(xs),len(ys)))
     last = 0
+
+    # Raster scanning over all xs and ys
     for i,x0 in enumerate(xs):
         for j,y0 in enumerate(ys):
             start = time.time()
             tip_eigenbasis = Tip(x0,y0)
             R_alphabeta = Responder.GetRAlphaBeta(tip_eigenbasis)
-            #if i==0 and j==0:
-            #    plt.figure()
-            #    plt.imshow(np.abs(R_alphabeta))
-            #    plt.show()
             Ps[i,j] = np.sum(np.linalg.inv(betaz_alpha-R_alphabeta).dot(Lambdaz_beta))
             Rs[i,j] = np.sum(np.diag(R_alphabeta))/N_tip_eigenbasis
             last = Progress(i,len(xs),last)
 
     return {'P':Ps,'R':Rs}
 
+
 global eigpairs
 eigpairs = load_eigpairs(basedir="/home/meberko/Projects/BokehPlasmons/sample_eigenbasis_data")
+"""
+r = SampleResponse(eigpairs,qw=44,N=1)
+"""
 d=TestScatteringBasisChange(q=44,N_tip_eigenbasis=1)
 plt.figure()
 plt.imshow(np.abs(d['P'])); plt.title('P');plt.colorbar()
