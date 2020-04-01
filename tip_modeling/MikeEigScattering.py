@@ -16,8 +16,8 @@ def mybessel(A,v,Q,x,y):
     r = np.sqrt(x**2+y**2)
     return A*sp.jv(v,Q*r)
 
-def planewave(qx,qy,x,y):
-    return np.sin(qx*x+qy*y)
+def planewave(qx,qy,x,y,phi=0):
+    return np.sin(qx*(x-1)+qy*y)
 
 class Translator:
     """
@@ -126,6 +126,8 @@ class SampleResponse:
         self._SetCoulombKernel()
         self._SetScatteringMatrix()
 
+        self.Us = []
+
     def _SetEnergy(self):
         """
             TODO: check energy units and sqrt eigenvals
@@ -175,9 +177,13 @@ class SampleResponse:
                                        shape=eigfuncs[0].shape,pad_by=.5,pad_with=0)
             p = mp.Pool(8)
             self.V_nm = np.array(p.starmap(Calc,product(eigfuncs,eigfuncs))).reshape((self.N,self.N))
+            #plt.figure(); plt.plot(np.abs(np.diag(self.V_nm))); plt.show();
         else:
             for i,v in enumerate(self.use_eigvals):
-                self.V_nm[i,i] = 1/np.sqrt(v)
+                """
+                    TODO: why is there a 3e4 here??
+                """
+                self.V_nm[i,i] = 3e4/np.sqrt(v)
 
     def _SetScatteringMatrix(self):
         if self.debug: print('Setting Scattering Matrix')
@@ -186,9 +192,9 @@ class SampleResponse:
     def GetRAlphaBeta(self,tip_eigenbasis):
         Psi=np.matrix([eigfunc.ravel() for eigfunc in tip_eigenbasis]) #Only have to unravel sample eigenfunctions once (twice speed-up)
         U=Psi*self.Phis.T
+        self.Us.append(U)
         U_inv = np.linalg.pinv(U) #@ASM2019.12.21 good to use inverse, since tip-basis may not be orthogonal
         result=np.dot(U,np.dot(self.D,U_inv))
-
         return result
 
     def __call__(self,excitations,U,tip_eigenbasis):
@@ -255,8 +261,10 @@ xv,yv = np.meshgrid(xs,ys)
 #eigpairs = load_eigpairs(basedir="../sample_eigenbasis_data")
 eigpairs = {}
 for n in range(1,300):
-    qx = np.pi*n
-    eigpairs[qx] = AWA(planewave(qx,0,xv,yv), axes = [xs,ys])
+    qx = np.pi*n/2
+    eigpairs[qx**2] = AWA(planewave(qx,0,xv,yv,phi=0.0), axes = [xs,ys])
+    print(eigpairs[qx**2][0][0])
+    #eigpairs[qx**2+1e-4] = AWA(planewave(qx,0,xv,yv,phi=np.pi/2), axes = [xs,ys])
 if show_eigs:
     for i,q in enumerate(list(eigpairs.keys())):
         if i<5:
@@ -266,7 +274,7 @@ if show_eigs:
     plt.show()
 
 if run_test:
-    d=TestScatteringBasisChange(q=44,N_tip_eigenbasis=2)
+    d=TestScatteringBasisChange(q=44,N_tip_eigenbasis=1)
     plt.figure()
     plt.imshow(np.abs(d['P'])); plt.title('P');plt.colorbar()
     plt.figure()
