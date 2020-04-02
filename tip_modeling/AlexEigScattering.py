@@ -1,65 +1,50 @@
+import os,h5py,time
 #import Plasmon_Modeling as PM
-#from dolfin import *
-#from fenics import *
-#from mshr import *
-#TODO: check units of eigenvalues, with proper mesh spacing in Helmholtz solver
-import BasisChangeTest as BCT
-import Plasmon_Modeling as PM
-import CoulombKernel as CK
-import os,time, h5py
-basedir=os.path.dirname(__file__)
-
+import multiprocessing as mp
+import numpy as np
+from scipy import special as sp
 from common import numerical_recipes as numrec
 from common.baseclasses import ArrayWithAxes as AWA
-from scipy import special as sp
-import numpy as np
 import matplotlib.pyplot as plt
-from scipy.integrate import simps
-import multiprocessing as mp
 from itertools import product
-#from numba import cuda
-#%matplotlib notebook
-
-def Progress(i,L,last):
-    next = last+10
-    percent = 100*i/L
-    if percent >= next:
-        print('{}% complete...'.format(next))
-        return next
-    else:
-        return last
+from Utils import Progress, load_eigpairs
 
 def Calc(psi,psi_star):
-    return np.sum(psi_star*myQC(psi))
+    
+    result=myQC(psi)
+    result-=np.mean(result)
+    result[result==result.max()]=0
+    
+    return np.sum((psi_star-np.mean(psi_star))*result)
 
-# Basis change functions
-def ChangeBasis(to_eigenbasis,from_eigenbasis,xs,ys):
-    to_nn = range(to_eigenbasis.shape[0])
-    from_nn = range(from_eigenbasis.shape[0])
-    U = np.zeros((len(to_nn), len(from_nn)))
-    last, N = 0, len(to_nn)*len(from_nn)
-    for to_n in to_nn:
-        for from_n in from_nn:
-            from_ef = to_eigenbasis[to_n]
-            to_ef = from_eigenbasis[from_n]
-            dot_prod = np.asarray(from_ef*to_ef)
-            sum = np.trapz(np.trapz(dot_prod,ys),xs)
-            #sum = nquad(lambda x,y: IntFun(dot_prod,x,y),[[-1,1],[-1,1]])
-            U[to_n,from_n] = sum
-            #last = Progress(to_n*from_n, N, last)
-    return U
+def mybessel(A,v,Q,x,y):
+    r = np.sqrt(x**2+y**2)
+    return A*sp.jv(v,Q*r)
 
-class BesselGenerator(object):
+def planewave(qx,qy,x,y,x0=0,phi0=0):
+    return np.sin(qx*(x-x0)+qy*y+phi0)
+
+class Translator:
     """
-    Generator of Bessel functions placed at arbitrary "center" position
-    within an xy mesh space.  Works by generating a bessel function on
-    a much larger xy mesh and then translating/truncating to the
-    original mesh.  Nothing fancy, but good for performance.
+        Allows for the translation of the center point of functions within an xy mesh space.
+
+        Works by generating a bessel function on
+        a much larger xy mesh and then translating/truncating to the
+        original mesh.  Nothing fancy, but good for performance.
     """
 
-    def __init__(self,q=20,\
-                 xs=np.linspace(-1,1,101),\
-                 ys=np.linspace(-1,1,101)):
+    """
+        TODO: Something is going on that flips the x and y coordinates when plotting or translating.
+
+        Doesn't make much sense...
+    """
+
+    def __init__(self,
+                 xs=np.linspace(-1,1,101),
+                 ys=np.linspace(-1,1,101),
+                 f = lambda x,y: sp.jv(0,np.sqrt(x**2+y**2))):
+
+        self.f = f
 
         #Bookkeeping of the coordinate mesh
         self.xs,self.ys=xs,ys
@@ -71,158 +56,164 @@ class BesselGenerator(object):
 
         #Make a mesh grid twice bigger in each direction
         bigshape=[2*N-1 for N in self.shape]
-        xs2grid,ys2grid=np.ogrid[self.midx-self.dx:self.midx+self.dx:bigshape[0]*1j,
-                                 self.midy-self.dy:self.midy+self.dy:bigshape[1]*1j]
-        self.xs2=xs2grid.squeeze()
-        self.ys2=ys2grid.squeeze()
+        xs2grid,ys2grid=np.ogrid[-self.dx:+self.dx:bigshape[0]*1j,
+                                 -self.dy:+self.dy:bigshape[1]*1j]
 
-        N_tip_eigenbasis = 10
-        J_zeros = sp.jn_zeros(0,N_tip_eigenbasis)
-        rs2 = np.sqrt(xs2grid**2+ys2grid**2)
-        self.Jbasis = np.array([(2/sp.jv(1,J_zeros[n]))*sp.jv(0,J_zeros[n]*rs2) for n in range(N_tip_eigenbasis)])
-
-        self.Jv = np.random.randint(0,high=5,size=N_tip_eigenbasis)
-        print('Excitation vector (in basis of J(n), n in [0,{}]):\n\t{}'.format(N_tip_eigenbasis,self.Jv))
-
-        self.Jm = np.array([u*self.Jbasis[i] for i,u in enumerate(self.Jv)])
-        self.bigJ=np.sum(self.Jm,axis=0)
-
-    def GetTipEigenbasis(self,x0,y0):
-        indx=np.argmin(np.abs(x0-self.xs2))
-        indy=np.argmin(np.abs(y0-self.ys2))
-        shiftx=self.shape[0]+indx
-        shifty=self.shape[1]+indy
-
-        tip_eigenbasis = []
-        for u in self.Jbasis:
-            newJ=np.roll(np.roll(u,shiftx,axis=0),\
-                         shifty,axis=1)
-            output = newJ[self.shape[0]//2:(3*self.shape[0])//2,\
-                        self.shape[1]//2:(3*self.shape[1])//2]
-            tip_eigenbasis.append(output)
-        return np.array(tip_eigenbasis)
+        self.bigF = self.f(xs2grid,ys2grid)
 
     def __call__(self,x0,y0):
-        indx=np.argmin(np.abs(x0-self.xs2))
-        indy=np.argmin(np.abs(y0-self.ys2))
-        shiftx=self.shape[0]+indx
-        shifty=self.shape[1]+indy
-
-        newJ=np.roll(np.roll(self.bigJ,shiftx,axis=0),\
-                     shifty,axis=1)
+        shift_by_dx=x0-self.midx
+        shift_by_dy=y0-self.midy
+        shift_by_nx=int(self.shape[0]*shift_by_dx/self.dx)
+        shift_by_ny=int(self.shape[1]*shift_by_dy/self.dy)
+        newJ=np.roll(np.roll(self.bigF,shift_by_nx,axis=0),\
+                     shift_by_ny,axis=1)
         output = newJ[self.shape[0]//2:(3*self.shape[0])//2,\
-                    self.shape[1]//2:(3*self.shape[1])//2]
-        return output
+                     self.shape[1]//2:(3*self.shape[1])//2]
+        return AWA(output,axes=[self.xs,self.ys])
 
-class SampleResponse(object):
+class TipResponse:
+    """
+        Abstraction of a tip which can generate excitations
+
+        Can output the tip eigenbases and the excitation functions
+    """
+
+    def __init__(self,xs=np.linspace(-1,1,101), ys=np.linspace(-1,1,101), q=20, N_tip_eigenbasis=5):
+        self.q = q
+        self.N_tip_eigenbasis = N_tip_eigenbasis
+
+        self.eigenbasis_translators = self._SetEigenbasisTranslators(xs,ys)
+
+    def _SetEigenbasisTranslators(self,xs,ys):
+        tip_eb = []
+        N = self.N_tip_eigenbasis
+        for n in range(N):
+            Q = (2*self.q*(n+1)/(N+1))
+            #Q=n*self.q
+            exp_prefactor = np.exp(-2*(n+1)/(N+1))
+            A = exp_prefactor*Q**2
+
+            D=1 #The larger D goes, the longer range the tip excitation
+            func = lambda x,y: np.exp(-Q/D*np.sqrt(x**2+y**2))*mybessel(A,0,Q,x,y)
+
+            tip_eb.append(Translator(xs=xs,ys=ys,f=func))
+        return tip_eb
+
+    def __call__(self,x0,y0):
+        tip_eb = [t(x0,y0) for t in self.eigenbasis_translators]
+        return AWA(tip_eb, axes=[None,tip_eb[0].axes[0],tip_eb[0].axes[1]])
+
+class SampleResponse:
     """
         Generator of sample response based on an input collection of
         eigenpairs (dictionary of eigenvalues + eigenfunctions).
 
         Can output a whole set of sample response functions from
         an input set of excitation functions.
-
-        Usage will be something like:
-
-        >>> from BasovPlasmons import AlexEigScattering as AES
-        >>> eigpairs = AES.load_eigpairs()
-        >>> xs=ys=np.linspace(-1,1,101)
-        >>> Jmaker=AES.BesselGenerator(q=20,xs=xs,ys=ys) #To provide excitations
-        >>> excitations=[Jmaker(x0,y0) for x0,y0 in zip(some_xs,some_ys)]
-        >>> SR=AES.SampleResponse(eigpairs,E=1400,N=125)
-        >>> responses=SR(excitations)
     """
 
     def __init__(self,eigpairs,E,N=100,debug=True):
-
-        eigvals=list(eigpairs.keys())
-        eigfuncs=list(eigpairs.values())
-        self.xs,self.ys=eigfuncs[0].axes
-
-        self.eigfuncs=AWA(eigfuncs,\
+        # Setting the easy stuff
+        eigvals = list(eigpairs.keys())
+        eigfuncs = list(eigpairs.values())
+        self.debug = debug
+        self.xs,self.ys = eigfuncs[0].axes
+        self.eigfuncs = AWA(eigfuncs,\
                           axes=[eigvals,self.xs,self.ys]).sort_by_axes()
-        self.eigvals=self.eigfuncs.axes[0]
+        self.eigvals = self.eigfuncs.axes[0]
+        self.phishape = self.eigfuncs[0].shape
+        self.E = E
+        self.N = N
 
-        self.phishape=self.eigfuncs[0].shape
-        self.E=E
-        self.N=N
-
-        #Aim eigenfunctions
-        if debug: print('Setting Energy')
-        self._SetEnergy(E)
-        if debug: print('Setting Sigma')
+        # Setting the various physical quantities
+        self._SetUseEigenvalues(E)
+        self._SetEnergy()
         self._SetSigma(10,10)
-        if debug: print('Setting Kernel')
         self._SetCoulombKernel()
-        if debug: print('Setting Scattering Matrix')
         self._SetScatteringMatrix()
 
-    def _SetEnergy(self,E):
+        self.Us = []
+
+    def _SetEnergy(self):
         """
             TODO: check energy units and sqrt eigenvals
         """
-        index=np.argmin(np.abs(self.eigvals-E))
-        ind1=np.max([index-self.N//2,0])
-        ind2=ind1+self.N
-
-        self.use_eigfuncs=self.eigfuncs[ind1:ind2]
+        if self.debug: print('Setting Energy')
         self.Phis=np.matrix([eigfunc.ravel() for eigfunc in self.use_eigfuncs])
-
-        self.use_eigvals=self.eigvals[ind1:ind2]
         self.Q = np.diag(self.use_eigvals)
 
+    def _SetUseEigenvalues(self, E):
+        if self.debug: print('Setting Use Eigenvalues')
+        index=np.argmin(np.abs(np.sqrt(self.eigvals)-E)) #@ASM2019.12.22 - This is to treat `E` not as the squared eigenvalue, but in units of the eigenvalue (`q_omega)
+        ind1=np.max([index-self.N//2,0])
+        ind2=ind1+self.N
+        print(ind1,ind2)
+        if ind2>len(self.eigfuncs):
+            ind2 = len(self.eigfuncs)+1
+            ind1 = ind2-self.N
+        if ind1<0: ind1=0
+        self.use_eigfuncs=self.eigfuncs[ind1:ind2]
+        self.use_eigvals=self.eigvals[ind1:ind2]
+        self.N=len(self.eigfuncs) #Just in case it was less than the originally provided `N`
+
     def _SetSigma(self,L,lamb):
-        self.sigma = PM.S()
-        self.sigma.set_sigma_values(lamb, L)
-        sigma_tilde = self.sigma.get_sigma_values()[0]+1j*self.sigma.get_sigma_values()[1]
-        self.alpha = -1j*sigma_tilde/np.abs(sigma_tilde)
+        if self.debug: print('Setting Sigma')
+
+        #self.sigma = PM.S()
+        #self.sigma.set_sigma_values(lamb, L)
+        #sigma_tilde = self.sigma.get_sigma_values()[0]+1j*self.sigma.get_sigma_values()[1]
+        #self.alpha = -1j*sigma_tilde/np.abs(sigma_tilde)
+
+        """
+            TODO: Do we need to change this? As of 2019.12.21, this was a placeholder
+        """
+        self.alpha = 1 #@ASM2019.12.21 just for nwo we put the 'complexity' into input `E`, until we get serious about recasting it to `q_omega`
 
     def _SetCoulombKernel(self):
+        """
+            TODO: I hacked this together in some crazy way to force multiprocessing.Pool to work...
+                    Needs to be understood and fixed
+        """
+        if self.debug: print('Setting Kernel')
+        poorman = False
         self.V_nm = np.zeros([len(self.use_eigvals), len(self.use_eigvals)])
-        eigfuncs = self.use_eigfuncs
-        kern_func = lambda x,y: 1/np.sqrt(x**2+y**2+1e-4)
-        global myQC
-        myQC=numrec.QuickConvolver(size=(100,100),kernel_function=kern_func,shape=eigfuncs[0].shape,pad_by=.5,pad_with=0)
-        self.myQC=numrec.QuickConvolver(size=(100,100),kernel_function=kern_func,shape=eigfuncs[0].shape,pad_by=.5,pad_with=0)
-
-        #start = time.time()
-        p = mp.Pool(5)
-        self.V_nm = np.array(p.starmap(Calc,product(eigfuncs,eigfuncs))).reshape((self.N,self.N))
-        #V_nm_from_mp = np.array(p.starmap(Calc,product(eigfuncs,eigfuncs))).reshape((self.N,self.N))
-        #print("MP time: {}".format(time.time()-start))
-
-        """
-        start = time.time()
-        for n in range(0,self.N):
-            for m in range(0,self.N):
-                psi = eigfuncs[m]
-                psi_star = eigfuncs[n]
-                self.V_nm[n,m]=np.sum(psi_star*self.myQC(psi))
-
-        print("Non mp time: {}".format(time.time()-start))
-        print(np.max(V_nm_from_mp-self.V_nm))
-        """
+        if not poorman:
+            eigfuncs = self.use_eigfuncs
+            
+            #The regularizer `dx*dy` will only influence the mean value of convolved functions
+            dx=np.mean(np.abs(np.diff(self.xs)))
+            dy=np.mean(np.abs(np.diff(self.xs)))
+            kern_func = lambda x,y: 1/np.sqrt(x**2+y**2+0.1*dx*dy)
+            
+            size=(self.xs.max()-self.xs.min(),\
+                  self.ys.max()-self.ys.min())
+            global myQC
+            myQC=numrec.QuickConvolver(size=size,kernel_function=kern_func,\
+                                       shape=eigfuncs[0].shape,pad_by=.5,pad_with=0)
+            #myQC=numrec.QuickConvolver(size=size,kernel_function=kern_func,\
+            #                           shape=eigfuncs[0].shape,pad_by=0,pad_with=0)
+            p = mp.Pool(8)
+            self.V_nm = np.array(p.starmap(Calc,product(eigfuncs,eigfuncs))).reshape((self.N,self.N))
+            #plt.figure(); plt.plot(np.abs(np.diag(self.V_nm))); plt.show();
+        else:
+            for i,v in enumerate(self.use_eigvals):
+                #see for instance: https://www.physicsforums.com/threads/2d-fourier-transform-of-coulomb-potenial.410079/
+                self.V_nm[i,i] = 2*np.pi/np.sqrt(v)
 
     def _SetScatteringMatrix(self):
+        if self.debug: print('Setting Scattering Matrix')
         self.D = self.E*np.linalg.inv(self.E*np.identity(self.Q.shape[0]) - self.alpha*self.Q.dot(self.V_nm))
 
-    def GetRAlphaBeta(self, tip_eigenbasis):
-        #start = time.time()
-        U = BCT.ChangeBasis(tip_eigenbasis,self.use_eigfuncs,self.xs,self.ys)
-        #U = BCT.ChangeBasisGPU(tip_eigenbasis,self.use_eigfuncs,self.xs,self.ys)
-        #GPU_elapsed = time.time()-start
-        #print("Basis Change (tip to sample) with GPU: {} seconds".format(GPU_elapsed))
-        #print("Speedup: {}".format(unopt_elapsed/GPU_elapsed))
-        #U = ChangeBasis(tip_eigenbasis, self.use_eigfuncs, self.xs, self.ys)
-        #plt.figure();plt.imshow(U);plt.show();
-        #U_inv = np.linalg.inv(U)
-        U_inv = U.T
-        #print('U shape: {}\nU_inv shape: {}'.format(U.shape,U_inv.shape))
-        result = np.dot(U,np.dot(self.D,U.T))
+    def GetRAlphaBeta(self,tip_eigenbasis):
+        Psi=np.matrix([eigfunc.ravel() for eigfunc in tip_eigenbasis]) #Only have to unravel sample eigenfunctions once (twice speed-up)
+        U=Psi*self.Phis.T
+        self.Us.append(U)
+        U_inv = np.linalg.pinv(U) #@ASM2019.12.21 good to use inverse, since tip-basis may not be orthogonal
+        result=np.dot(U,np.dot(self.D,U_inv))
         return result
 
     def __call__(self,excitations,U,tip_eigenbasis):
-
         if np.array(excitations).ndim==2: excitations=[excitations]
         Exc=np.array([exc.ravel() for exc in excitations])
         tip_eb=np.matrix([eigfunc.ravel() for eigfunc in tip_eigenbasis])
@@ -243,132 +234,85 @@ class SampleResponse(object):
         projected_result=np.array(projected_result).T.reshape((len(excitations),)+self.phishape)
         return AWA(result,axes=[None,self.xs,self.ys]).squeeze(), AWA(projected_result,axes=[None,self.xs,self.ys]).squeeze()
 
-#--- Example functions
-def load_eigpairs(eigpair_fname):
-    """Are eigenvalues correct?? They seem to be for Laplace operator on mesh of 0-101 range.
+def TestScatteringBasisChange(q=44,\
+                           E=44*np.exp(1j*2*np.pi*5e-2),\
+                           N_sample_eigenbasis=100,\
+                           N_tip_eigenbasis = 10):
 
-    Normalization by sum always ensures that integration will be like summing, which is
-    much simpler than keeping track of dx, dy..."""
+    global Responder,Tip,R_alphabeta,eigpairs
 
-    global eigpairs
-    eigpairs = dict()
+    Responder = SampleResponse(eigpairs,E=E,N=N_sample_eigenbasis)
+    xs,ys = Responder.xs,Responder.ys
+    Tip = TipResponse(xs,ys,q=q,N_tip_eigenbasis=N_tip_eigenbasis)
 
-    path=os.path.join(basedir,eigpair_fname)
+    betaz_alpha = np.diag((2-.1j)*(np.arange(N_tip_eigenbasis)+1))
+    Lambdaz_beta = ((1+np.arange(N_tip_eigenbasis))[::-1])
 
-    with h5py.File(path,'r') as f:
-        for key in list(f.keys()):
-            eigfunc=np.array(f.get(key))
-            eigfunc/=np.sqrt(np.sum(np.abs(eigfunc)**2))
-            eigpairs[float(key)] = AWA(eigfunc,\
-                                       axes=[np.linspace(-1,1,eigfunc.shape[0]),\
-                                             np.linspace(-1,1,eigfunc.shape[1])])
-
-    #return eigpairs
-
-def scan_qs_at_E(qs=np.linspace(5,30,200),\
-                 E=2000*np.exp(1j*2*np.pi*5e-2),\
-                 N=500,y0=0):
-    """Scan a bunch of excitation wave vectors for a fixed choice of energy."""
-
-    #Scan qs
-    global Responder,Jmaker
-
-    Responder=SampleResponse(eigpairs,E=E,N=N)
-    xs,ys=Responder.xs,Responder.ys
-
-    y0=y0
-    output=np.zeros((len(qs),len(xs)),dtype=complex)
+    Ps=np.zeros((len(xs),len(ys)))
+    Rs=np.zeros((len(xs),len(ys)))
     last = 0
-    for i,q in enumerate(qs):
-
-        Jmaker=BesselGenerator(q,xs=xs,ys=ys)
-        excitations=[Jmaker(x0,y0) for x0 in xs]
-
-        responses=Responder(excitations)
-        output[i]=[response.cslice[x0,y0] for response,x0 in zip(responses,xs)]
-        last = Progress(i,len(qs),last)
-
-    output=AWA(output,axes=[qs,xs],axis_names=['$q$','$X$'])
-    plt.figure();np.abs(output).plot()
-    plt.title('$q$-sweep at E=%1.2f'%np.abs(E))
-    plt.tight_layout()
-
-    return output
-
-def scan_source_at_q_and_E(q=20,\
-                           E=2000*np.exp(1j*2*np.pi*5e-2),\
-                           N=100):
-    """Raster scan a bunch of bessel waves over the sample and look at the
-    sample response at each excitation point.  Computes sample response in
-    parallel for excitations placed at each x-position; could  try to
-    compute all responses in parallel limited only by CPU memory..."""
-
-    global Responder,Jmaker
-
-    Responder=SampleResponse(eigpairs,E=E,N=N)
-    xs,ys=Responder.xs,Responder.ys
-    Jmaker=BesselGenerator(q,xs=xs,ys=ys)
-
-    output=np.zeros((len(xs),len(ys)),dtype=complex)
-    projected_output=np.zeros((len(xs),len(ys)),dtype=complex)
-    last = 0
-    to_efs = Jmaker.smallJbasis
-    from_efs = Responder.use_eigfuncs
-    U = ChangeBasis(to_efs,from_efs,xs,ys)
-    for i,x0 in enumerate(xs):
-        #excitations=[Jmaker(x0,y0) for y0 in ys]
-        #responses=Responder(excitations,U,to_efs)
-        for j,y0 in enumerate(ys):
-            #print(i,j)
-            excitation,_=Jmaker(x0,y0)
-            response, projected_response=Responder(excitation,U,to_efs)
-            output[i,j]=response.cslice[x0,y0]
-            projected_output[i,j]=projected_response.cslice[x0,y0]
-            last = Progress(i,len(xs),last)
-    output=AWA(output,axes=[xs,ys],axis_names=['$X$','$Y$'])
-    projected_output=AWA(projected_output,axes=[xs,ys],axis_names=['$X$','$Y$'])
-    plt.figure();np.abs(output).plot()
-    plt.title('Response at scanned positions')
-    plt.tight_layout()
-    plt.figure();np.abs(projected_output).plot()
-    plt.title('Projected response at scanned positions')
-    plt.tight_layout()
-    plt.show()
-
-    return output
-
-def TestScatteringBasisChange(q=20,\
-                           E=2000*np.exp(1j*2*np.pi*5e-2),\
-                           N=100):
-
-    global Responder,Jmaker
-
-    Responder=SampleResponse(eigpairs,E=E,N=N)
-    xs,ys=Responder.xs,Responder.ys
-    Jmaker=BesselGenerator(q,xs=xs,ys=ys)
-
-    last = 0
-<<<<<<< HEAD
-    start = time.time()
-    for i,x0 in enumerate(xs):
-        for j,y0 in enumerate(ys):
-            #print(i,j)
-            tip_eigenbasis=Jmaker.GetTipEigenbasis(x0,y0)
-            Responder.GetRAlphaBeta(tip_eigenbasis)
-=======
-    elapsed = time.time()-start
     for i,x0 in enumerate(xs):
         for j,y0 in enumerate(ys):
             start = time.time()
-            tip_eigenbasis=Jmaker.GetTipEigenbasis(x0,y0)
+
+            tip_eigenbasis = Tip(x0,y0)
             R_alphabeta = Responder.GetRAlphaBeta(tip_eigenbasis)
-            print(R_alphabeta.shape)
-            Pz = np.diag(np.ones(R_alphabeta.shape[0]))
-            print(Pz)
+            Ps[i,j] = np.sum(np.linalg.inv(betaz_alpha-R_alphabeta).dot(Lambdaz_beta))
+            Rs[i,j] = np.sum(np.diag(R_alphabeta))/N_tip_eigenbasis
 
->>>>>>> d06cb18cf995420516257cf00aff877072c4685a
             last = Progress(i,len(xs),last)
-    elapsed = time.time()-start
-    print('Time to calculate RAlphaBeta for all (x,y): {} s'.format(elapsed))
 
-    #return output
+            #if i==0 and j==0:
+            #    plt.figure()
+            #    plt.imshow(np.abs(R_alphabeta))
+            #    plt.show()
+
+    return {'P':Ps,'R':Rs}
+
+show_eigs = False
+run_test = True
+global eigpairs
+xs,ys = np.arange(101), np.arange(101); L=xs.max()
+xv,yv = np.meshgrid(xs,ys)
+#eigpairs = load_eigpairs(basedir="../sample_eigenbasis_data")
+eigpairs = {}
+
+Nqs=100
+graphene_ribbon=True
+if graphene_ribbon:
+    
+    q0=np.pi/L #This is for particle in box (allowed wavelength is n*2*L)
+    for n in range(1,Nqs+1):
+        qx = n*q0
+        pw = AWA(planewave(qx,0,xv,yv,x0=0,phi0=pi/2), axes = [xs,ys]) #cosine waves, this is for 
+        eigpairs[qx**2]=pw/np.sqrt(np.sum(pw**2))
+        
+else:
+
+    q0=2*np.pi/L #This is for infinite sample
+    for n in range(1,Nqs+1):
+        qx = n*q0
+        pw = AWA(planewave(qx,0,xv,yv,x0=0,phi0=np.pi/2), axes = [xs,ys]) #cosine waves
+        eigpairs[qx**2]=pw/np.sqrt(np.sum(pw**2))
+        
+        pw2 = AWA(planewave(qx,0,xv,yv,x0=0,phi0=0), axes = [xs,ys]) #sine waves, This is for infinite sample
+        eigpairs[qx**2+1e-9]=pw2/np.sqrt(np.sum(pw2**2)) #This is for infinite sample
+    
+if show_eigs:
+    for i,q in enumerate(list(eigpairs.keys())):
+        if i<5:
+            plt.figure()
+            plt.imshow(eigpairs[q])
+            plt.title("q={}".format(q))
+    plt.show()
+
+if run_test:
+    q=2*np.pi/L*20
+    #Responder = SampleResponse(eigpairs,E=q,N=100)
+    
+    d=TestScatteringBasisChange(E=q*np.exp(1j*2*np.pi*5e-2),q=q,N_tip_eigenbasis=3)
+    plt.figure()
+    plt.imshow(np.abs(d['P'])); plt.title('P');plt.colorbar()
+    plt.figure()
+    plt.imshow(np.abs(d['R'])); plt.title('R');plt.colorbar()
+    plt.show()
