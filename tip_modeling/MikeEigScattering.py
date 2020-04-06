@@ -119,37 +119,31 @@ class SampleResponse:
         #lambda_p, L_p = 10,10
 
         # Setting the various physical quantities
-        self._SetSigma(sigma_1, sigma_2)
-        self._SetEnergy()
+        self._SetAlpha(sigma_1, sigma_2)
+        #self._SetEnergy()
         self._SetUseEigenvalues()
         self._SetCoulombKernel()
         self._SetScatteringMatrix()
 
-    def _SetSigma(self,s1,s2):
+    def _SetAlpha(self,s1,s2):
         if self.debug: print('Setting Sigma')
 
         self.sigma = PM.S(s1,s2)
         #self.sigma.set_sigma_values(lamb, L)
         sigma_tilde = self.sigma.get_sigma_values()[0]+1j*self.sigma.get_sigma_values()[1]
-        self.alpha = sigma_tilde/np.abs(sigma_tilde)
+        self.alpha = -1j*sigma_tilde/np.abs(sigma_tilde)
         if self.debug: print("\tsigma={}".format(sigma_tilde))
 
-        """
-            TODO: Do we need to change this? As of 2019.12.21, this was a placeholder
-        """
-        #self.alpha = 1 #@ASM2019.12.21 just for nwo we put the 'complexity' into input `E`, until we get serious about recasting it to `q_omega`
-
+    """
     def _SetEnergy(self):
-        """
-            TODO: check energy units and sqrt eigenvals
-        """
         if self.debug: print('Setting Energy')
         self.E = self.qw*self.alpha
         if self.debug: print("\tE={}".format(self.E))
+    """
 
     def _SetUseEigenvalues(self):
         if self.debug: print('Setting Use Eigenvalues')
-        index=np.argmin(np.abs(np.sqrt(self.eigvals)-self.E)) #@ASM2019.12.22 - This is to treat `E` not as the squared eigenvalue, but in units of the eigenvalue (`q_omega)
+        index=np.argmin(np.abs(self.eigvals-self.qw**2)) #@ASM2019.12.22 - This is to treat `E` not as the squared eigenvalue, but in units of the eigenvalue (`q_omega)
         ind1=np.max([index-self.N//2,0])
         ind2=ind1+self.N
         if ind2>len(self.eigfuncs):
@@ -184,7 +178,7 @@ class SampleResponse:
 
     def _SetScatteringMatrix(self):
         if self.debug: print('Setting Scattering Matrix')
-        self.D = self.E*np.linalg.inv(self.E*np.identity(self.Q.shape[0]) - self.alpha*self.Q.dot(self.V_nm))
+        self.D = self.qw*np.linalg.inv(self.qw*np.identity(self.Q.shape[0]) - self.alpha*self.Q.dot(self.V_nm))
 
     def GetRAlphaBeta(self,tip_eigenbasis):
         Psi=np.matrix([eigfunc.ravel() for eigfunc in tip_eigenbasis]) #Only have to unravel sample eigenfunctions once (twice speed-up)
