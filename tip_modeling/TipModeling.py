@@ -2,10 +2,10 @@ import os,h5py,time
 import Plasmon_Modeling as PM
 import multiprocessing as mp
 import numpy as np
+import matplotlib.pyplot as plt
 from scipy import special as sp
 from common import numerical_recipes as numrec
 from common.baseclasses import ArrayWithAxes as AWA
-import matplotlib.pyplot as plt
 from itertools import product
 from Utils import Progress, load_eigpairs, mybessel, planewave
 import warnings
