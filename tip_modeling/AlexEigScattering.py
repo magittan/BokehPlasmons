@@ -10,11 +10,11 @@ from itertools import product
 from Utils import Progress, load_eigpairs
 
 def Calc(psi,psi_star):
-    
+
     result=myQC(psi)
     result-=np.mean(result)
     result[result==result.max()]=0
-    
+
     return np.sum((psi_star-np.mean(psi_star))*result)
 
 def mybessel(A,v,Q,x,y):
@@ -180,12 +180,12 @@ class SampleResponse:
         self.V_nm = np.zeros([len(self.use_eigvals), len(self.use_eigvals)])
         if not poorman:
             eigfuncs = self.use_eigfuncs
-            
+
             #The regularizer `dx*dy` will only influence the mean value of convolved functions
             dx=np.mean(np.abs(np.diff(self.xs)))
             dy=np.mean(np.abs(np.diff(self.xs)))
             kern_func = lambda x,y: 1/np.sqrt(x**2+y**2+0.1*dx*dy)
-            
+
             size=(self.xs.max()-self.xs.min(),\
                   self.ys.max()-self.ys.min())
             global myQC
@@ -221,12 +221,7 @@ class SampleResponse:
                             np.dot(U,\
                                 np.dot(self.D,\
                                     np.dot(self.Phis,Exc.T))))
-        #plt.figure();plt.imshow(np.abs(result.reshape(101,101)));plt.show()
 
-        #These are all the matrices that get multiplied, take a look that shapes work...
-        #print([item.shape for item in [self.Phis.T,self.D,self.Phis,Exc.T]])
-        #result is in form of column vectors
-        #turn into row vectors then reshape
         result=np.dot(self.Phis.T,\
                        np.dot(self.D,\
                              np.dot(self.Phis,Exc.T)))
@@ -280,13 +275,13 @@ eigpairs = {}
 Nqs=100
 graphene_ribbon=True
 if graphene_ribbon:
-    
+
     q0=np.pi/L #This is for particle in box (allowed wavelength is n*2*L)
     for n in range(1,Nqs+1):
         qx = n*q0
-        pw = AWA(planewave(qx,0,xv,yv,x0=0,phi0=pi/2), axes = [xs,ys]) #cosine waves, this is for 
+        pw = AWA(planewave(qx,0,xv,yv,x0=0,phi0=pi/2), axes = [xs,ys]) #cosine waves, this is for
         eigpairs[qx**2]=pw/np.sqrt(np.sum(pw**2))
-        
+
 else:
 
     q0=2*np.pi/L #This is for infinite sample
@@ -294,10 +289,10 @@ else:
         qx = n*q0
         pw = AWA(planewave(qx,0,xv,yv,x0=0,phi0=np.pi/2), axes = [xs,ys]) #cosine waves
         eigpairs[qx**2]=pw/np.sqrt(np.sum(pw**2))
-        
+
         pw2 = AWA(planewave(qx,0,xv,yv,x0=0,phi0=0), axes = [xs,ys]) #sine waves, This is for infinite sample
         eigpairs[qx**2+1e-9]=pw2/np.sqrt(np.sum(pw2**2)) #This is for infinite sample
-    
+
 if show_eigs:
     for i,q in enumerate(list(eigpairs.keys())):
         if i<5:
@@ -309,8 +304,8 @@ if show_eigs:
 if run_test:
     q=2*np.pi/L*20
     #Responder = SampleResponse(eigpairs,E=q,N=100)
-    
-    d=TestScatteringBasisChange(E=q*np.exp(1j*2*np.pi*5e-2),q=q,N_tip_eigenbasis=3)
+
+    d=TestScatteringBasisChange(E=q*np.exp(1j*2*np.pi*5e-2),q=q,N_tip_eigenbasis=5)
     plt.figure()
     plt.imshow(np.abs(d['P'])); plt.title('P');plt.colorbar()
     plt.figure()
