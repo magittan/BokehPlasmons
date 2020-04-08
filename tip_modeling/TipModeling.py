@@ -11,12 +11,7 @@ from Utils import Progress, load_eigpairs, mybessel, planewave
 import warnings
 warnings.filterwarnings('ignore')
 
-def Calc(psi,psi_star):
-    result=myQC(psi)
-    result-=np.mean(result)
-    result[result==result.max()]=0
-
-    return np.sum((psi_star-np.mean(psi_star))*result)
+DEBUG = True
 
 class Translator:
     """
@@ -106,18 +101,17 @@ class SampleResponse:
         an input set of excitation functions.
     """
 
-    def __init__(self,eigpairs,qw=44,N=100,debug=True):
+    def __init__(self,eigpairs,qw=44,N_sample_eigenbasis=100):
         # Setting the easy stuff
         eigvals = list(eigpairs.keys())
         eigfuncs = list(eigpairs.values())
-        self.debug = debug
         self.xs,self.ys = eigfuncs[0].axes
         self.eigfuncs = AWA(eigfuncs,\
                           axes=[eigvals,self.xs,self.ys]).sort_by_axes()
         self.eigvals = self.eigfuncs.axes[0]
         self.phishape = self.eigfuncs[0].shape
         self.qw = qw
-        self.N = N
+        self.N = N_sample_eigenbasis
         sigma_1,sigma_2 = np.real(np.exp(2*np.pi*1j*0.05)), np.imag(np.exp(2*np.pi*1j*0.05))
         #lambda_p, L_p = 10,10
 
@@ -130,16 +124,16 @@ class SampleResponse:
         self.Us = []
 
     def _SetAlpha(self,s1,s2):
-        if self.debug: print('Setting Sigma')
+        if DEBUG: print('Setting Sigma')
 
         self.sigma = PM.S(s1,s2)
         sigma_tilde = self.sigma.get_sigma_values()[0]+1j*self.sigma.get_sigma_values()[1]
         self.alpha = -1j*sigma_tilde/np.abs(sigma_tilde)
 
-        #if self.debug: print("\tsigma={}".format(sigma_tilde))
+        #if DEBUG: print("\tsigma={}".format(sigma_tilde))
 
     def _SetUseEigenvalues(self):
-        if self.debug: print('Setting Use Eigenvalues')
+        if DEBUG: print('Setting Use Eigenvalues')
         index=np.argmin(np.abs(self.eigvals-self.qw**2)) #@ASM2019.12.22 - This is to treat `E` not as the squared eigenvalue, but in units of the eigenvalue (`q_omega)
         ind1=np.max([index-self.N//2,0])
         ind2=ind1+self.N
@@ -157,7 +151,15 @@ class SampleResponse:
             TODO: I hacked this together in some crazy way to force multiprocessing.Pool to work...
                     Needs to be understood and fixed
         """
-        if self.debug: print('Setting Kernel')
+
+        def Calc(psi,psi_star):
+            result=myQC(psi)
+            result-=np.mean(result)
+            result[result==result.max()]=0
+
+            return np.sum((psi_star-np.mean(psi_star))*result)
+            
+        if DEBUG: print('Setting Kernel')
         poorman = True
         self.V_nm = np.zeros([len(self.use_eigvals), len(self.use_eigvals)])
         if not poorman:
@@ -174,7 +176,7 @@ class SampleResponse:
                 self.V_nm[i,i] = 2*np.pi/np.sqrt(v)
 
     def _SetScatteringMatrix(self):
-        if self.debug: print('Setting Scattering Matrix')
+        if DEBUG: print('Setting Scattering Matrix')
         self.D = self.qw*np.linalg.inv(self.qw*np.identity(self.Q.shape[0]) - self.alpha*self.Q.dot(self.V_nm))
 
     def GetRAlphaBeta(self,tip_eigenbasis):
@@ -201,43 +203,35 @@ class SampleResponse:
         projected_result=np.array(projected_result).T.reshape((len(excitations),)+self.phishape)
         return AWA(result,axes=[None,self.xs,self.ys]).squeeze(), AWA(projected_result,axes=[None,self.xs,self.ys]).squeeze()
 
-def TestScatteringBasisChange(q=44,\
-                           E=44*np.exp(1j*2*np.pi*5e-2),\
-                           N_sample_eigenbasis=100,\
-                           N_tip_eigenbasis = 10):
+def RasterScan(Sample, Tip):
+    if DEBUG: print("Starting RasterScan")
+    betaz_alpha = np.diag((2-.1j)*(np.arange(Tip.N_tip_eigenbasis)+1))
+    Lambdaz_beta = ((1+np.arange(Tip.N_tip_eigenbasis))[::-1])
 
-    global Responder,Tip,R_alphabeta
-
-    Responder = SampleResponse(eigpairs,qw=q,N=N_sample_eigenbasis)
-    xs,ys = Responder.xs,Responder.ys
-    Tip = TipResponse(xs,ys,q=q,N_tip_eigenbasis=N_tip_eigenbasis)
-
-    betaz_alpha = np.diag((2-.1j)*(np.arange(N_tip_eigenbasis)+1))
-    Lambdaz_beta = ((1+np.arange(N_tip_eigenbasis))[::-1])
-
-    Ps=np.zeros((len(xs),len(ys)))
-    Rs=np.zeros((len(xs),len(ys)))
+    Ps, Rs = np.zeros((len(xs),len(ys))), np.zeros((len(xs),len(ys)))
     last = 0
 
     # Raster scanning over all xs and ys
-    for i,x0 in enumerate(xs):
-        for j,y0 in enumerate(ys):
+    for i,x0 in enumerate(Sample.xs):
+        for j,y0 in enumerate(Sample.ys):
             start = time.time()
 
             tip_eigenbasis = Tip(x0,y0)
-            R_alphabeta = Responder.GetRAlphaBeta(tip_eigenbasis)
+            R_alphabeta = Sample.GetRAlphaBeta(tip_eigenbasis)
             Ps[i,j] = np.sum(np.linalg.inv(betaz_alpha-R_alphabeta).dot(Lambdaz_beta))
-            Rs[i,j] = np.sum(np.diag(R_alphabeta))/N_tip_eigenbasis
+            Rs[i,j] = np.sum(np.diag(R_alphabeta))/Tip.N_tip_eigenbasis
             last = Progress(i,len(xs),last)
 
     return {'P':Ps,'R':Rs}
 
-global eigpairs
+q=44
 eigpairs = load_eigpairs(basedir="/home/meberko/Projects/BokehPlasmons/sample_eigenbasis_data")
-"""
-r = SampleResponse(eigpairs,qw=44,N=1)
-"""
-d=TestScatteringBasisChange(q=44,N_tip_eigenbasis=3)
+Sample = SampleResponse(eigpairs,qw=q,N_sample_eigenbasis=100)
+xs,ys = Sample.xs,Sample.ys
+Tip = TipResponse(xs,ys,q=q,N_tip_eigenbasis=1)
+
+d = RasterScan(Sample, Tip)
+
 plt.figure()
 plt.imshow(np.abs(d['P'])); plt.title('P');plt.colorbar()
 plt.figure()

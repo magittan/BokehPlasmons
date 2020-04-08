@@ -7,7 +7,7 @@ def Progress(i,L,last):
     next = last+10
     percent = 100*i/L
     if percent >= next:
-        print('{}% complete...'.format(next))
+        print('\t{}% complete...'.format(next))
         return next
     else:
         return last
