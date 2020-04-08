@@ -13,6 +13,13 @@ warnings.filterwarnings('ignore')
 
 DEBUG = True
 
+def Calc(psi,psi_star):
+    result=myQC(psi)
+    result-=np.mean(result)
+    result[result==result.max()]=0
+
+    return np.sum((psi_star-np.mean(psi_star))*result)
+
 class Translator:
     """
         Allows for the translation of the center point of functions within an xy mesh space.
@@ -66,6 +73,10 @@ class TipResponse:
         Abstraction of a tip which can generate excitations
 
         Can output the tip eigenbases and the excitation functions
+    """
+
+    """
+        TODO: add functionality to allow for people to change the tip function
     """
 
     def __init__(self,xs=np.linspace(-1,1,101), ys=np.linspace(-1,1,101), q=20, N_tip_eigenbasis=5):
@@ -152,17 +163,11 @@ class SampleResponse:
                     Needs to be understood and fixed
         """
 
-        def Calc(psi,psi_star):
-            result=myQC(psi)
-            result-=np.mean(result)
-            result[result==result.max()]=0
-
-            return np.sum((psi_star-np.mean(psi_star))*result)
-            
         if DEBUG: print('Setting Kernel')
-        poorman = True
+        poorman = False
         self.V_nm = np.zeros([len(self.use_eigvals), len(self.use_eigvals)])
         if not poorman:
+            start=time.time()
             eigfuncs = self.use_eigfuncs
             kern_func = lambda x,y: 1/np.sqrt(x**2+y**2+1e-4)
             global myQC
@@ -171,6 +176,7 @@ class SampleResponse:
                                        shape=eigfuncs[0].shape,pad_by=.5,pad_with=0)
             p = mp.Pool(8)
             self.V_nm = np.array(p.starmap(Calc,product(eigfuncs,eigfuncs))).reshape((self.N,self.N))
+            print("\tTime elapsed:{}".format(time.time()-start))
         else:
             for i,v in enumerate(self.use_eigvals):
                 self.V_nm[i,i] = 2*np.pi/np.sqrt(v)
@@ -187,6 +193,30 @@ class SampleResponse:
         result=np.dot(U,np.dot(self.D,U_inv))
         return result
 
+    def RasterScan(self, Tip):
+        """
+            TODO: check changes to be made to betaz_alpha and Lambdaz_beta
+        """
+        if DEBUG: print("Starting RasterScan")
+        betaz_alpha = np.diag((2-.1j)*(np.arange(Tip.N_tip_eigenbasis)+1))
+        Lambdaz_beta = ((1+np.arange(Tip.N_tip_eigenbasis))[::-1])
+
+        Ps, Rs = np.zeros((len(self.xs),len(self.ys))), np.zeros((len(self.xs),len(self.ys)))
+        last = 0
+
+        # Raster scanning over all xs and ys
+        for i,x0 in enumerate(self.xs):
+            for j,y0 in enumerate(self.ys):
+                start = time.time()
+
+                tip_eigenbasis = Tip(x0,y0)
+                R_alphabeta = self.GetRAlphaBeta(tip_eigenbasis)
+                Ps[i,j] = np.sum(np.linalg.inv(betaz_alpha-R_alphabeta).dot(Lambdaz_beta))
+                Rs[i,j] = np.sum(np.diag(R_alphabeta))/Tip.N_tip_eigenbasis
+                last = Progress(i,len(self.xs),last)
+
+        return {'P':Ps,'R':Rs}
+
     def __call__(self,excitations,U,tip_eigenbasis):
         if np.array(excitations).ndim==2: excitations=[excitations]
         Exc=np.array([exc.ravel() for exc in excitations])
@@ -202,38 +232,3 @@ class SampleResponse:
         result=np.array(result).T.reshape((len(excitations),)+self.phishape)
         projected_result=np.array(projected_result).T.reshape((len(excitations),)+self.phishape)
         return AWA(result,axes=[None,self.xs,self.ys]).squeeze(), AWA(projected_result,axes=[None,self.xs,self.ys]).squeeze()
-
-def RasterScan(Sample, Tip):
-    if DEBUG: print("Starting RasterScan")
-    betaz_alpha = np.diag((2-.1j)*(np.arange(Tip.N_tip_eigenbasis)+1))
-    Lambdaz_beta = ((1+np.arange(Tip.N_tip_eigenbasis))[::-1])
-
-    Ps, Rs = np.zeros((len(xs),len(ys))), np.zeros((len(xs),len(ys)))
-    last = 0
-
-    # Raster scanning over all xs and ys
-    for i,x0 in enumerate(Sample.xs):
-        for j,y0 in enumerate(Sample.ys):
-            start = time.time()
-
-            tip_eigenbasis = Tip(x0,y0)
-            R_alphabeta = Sample.GetRAlphaBeta(tip_eigenbasis)
-            Ps[i,j] = np.sum(np.linalg.inv(betaz_alpha-R_alphabeta).dot(Lambdaz_beta))
-            Rs[i,j] = np.sum(np.diag(R_alphabeta))/Tip.N_tip_eigenbasis
-            last = Progress(i,len(xs),last)
-
-    return {'P':Ps,'R':Rs}
-
-q=44
-eigpairs = load_eigpairs(basedir="/home/meberko/Projects/BokehPlasmons/sample_eigenbasis_data")
-Sample = SampleResponse(eigpairs,qw=q,N_sample_eigenbasis=100)
-xs,ys = Sample.xs,Sample.ys
-Tip = TipResponse(xs,ys,q=q,N_tip_eigenbasis=1)
-
-d = RasterScan(Sample, Tip)
-
-plt.figure()
-plt.imshow(np.abs(d['P'])); plt.title('P');plt.colorbar()
-plt.figure()
-plt.imshow(np.abs(d['R'])); plt.title('R');plt.colorbar()
-plt.show()
