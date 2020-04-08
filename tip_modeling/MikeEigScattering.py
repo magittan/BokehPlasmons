@@ -10,11 +10,11 @@ from itertools import product
 from Utils import Progress, load_eigpairs
 
 def Calc(psi,psi_star):
-    
+
     result=myQC(psi)
     result-=np.mean(result)
     result[result==result.max()]=0
-    
+
     return np.sum((psi_star-np.mean(psi_star))*result)
 
 def mybessel(A,v,Q,x,y):
@@ -108,6 +108,7 @@ class SampleResponse:
     """
         Generator of sample response based on an input collection of
         eigenpairs (dictionary of eigenvalues + eigenfunctions).
+<<<<<<< HEAD
 
         Can output a whole set of sample response functions from
         an input set of excitation functions.
@@ -135,7 +136,6 @@ class SampleResponse:
         self._SetCoulombKernel()
         self._SetScatteringMatrix()
 
-<<<<<<< HEAD
     def _SetSigma(self,s1,s2):
         if self.debug: print('Setting Sigma')
 
@@ -149,9 +149,6 @@ class SampleResponse:
             TODO: Do we need to change this? As of 2019.12.21, this was a placeholder
         """
         #self.alpha = 1 #@ASM2019.12.21 just for nwo we put the 'complexity' into input `E`, until we get serious about recasting it to `q_omega`
-=======
-        self.Us = []
->>>>>>> 2124394008beeebc53eb2cd51bcc35c996465aa6
 
     def _SetEnergy(self):
         """
@@ -206,12 +203,12 @@ class SampleResponse:
         self.V_nm = np.zeros([len(self.use_eigvals), len(self.use_eigvals)])
         if not poorman:
             eigfuncs = self.use_eigfuncs
-            
+
             #The regularizer `dx*dy` will only influence the mean value of convolved functions
             dx=np.mean(np.abs(np.diff(self.xs)))
             dy=np.mean(np.abs(np.diff(self.xs)))
             kern_func = lambda x,y: 1/np.sqrt(x**2+y**2+0.1*dx*dy)
-            
+
             size=(self.xs.max()-self.xs.min(),\
                   self.ys.max()-self.ys.min())
             global myQC
@@ -297,13 +294,13 @@ eigpairs = {}
 Nqs=100
 graphene_ribbon=True
 if graphene_ribbon:
-    
+
     q0=np.pi/L #This is for particle in box (allowed wavelength is n*2*L)
     for n in range(1,Nqs+1):
         qx = n*q0
-        pw = AWA(planewave(qx,0,xv,yv,x0=0,phi0=pi/2), axes = [xs,ys]) #cosine waves, this is for 
+        pw = AWA(planewave(qx,0,xv,yv,x0=0,phi0=pi/2), axes = [xs,ys]) #cosine waves, this is for
         eigpairs[qx**2]=pw/np.sqrt(np.sum(pw**2))
-        
+
 else:
 
     q0=2*np.pi/L #This is for infinite sample
@@ -311,10 +308,10 @@ else:
         qx = n*q0
         pw = AWA(planewave(qx,0,xv,yv,x0=0,phi0=np.pi/2), axes = [xs,ys]) #cosine waves
         eigpairs[qx**2]=pw/np.sqrt(np.sum(pw**2))
-        
+
         pw2 = AWA(planewave(qx,0,xv,yv,x0=0,phi0=0), axes = [xs,ys]) #sine waves, This is for infinite sample
         eigpairs[qx**2+1e-9]=pw2/np.sqrt(np.sum(pw2**2)) #This is for infinite sample
-    
+
 if show_eigs:
     for i,q in enumerate(list(eigpairs.keys())):
         if i<5:
@@ -326,7 +323,7 @@ if show_eigs:
 if run_test:
     q=2*np.pi/L*20
     #Responder = SampleResponse(eigpairs,E=q,N=100)
-    
+
     d=TestScatteringBasisChange(E=q*np.exp(1j*2*np.pi*5e-2),q=q,N_tip_eigenbasis=3)
     plt.figure()
     plt.imshow(np.abs(d['P'])); plt.title('P');plt.colorbar()
