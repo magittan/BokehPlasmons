@@ -120,6 +120,7 @@ class RectangularSample(object):
         Returns:
             RectangularSample object
         """
+        
         self.width = width
         self.height = height
         self.domain = Rectangle(Point(0, 0),
@@ -370,8 +371,9 @@ class RectangularSample(object):
             return on_boundary
 
         #Establishing the Boundary Conditions
-
-        bc_O = DirichletBC(ME, (Constant(0.0),Constant(0.0)), u0_boundary)
+        
+        #ASM2020.04.08 - disabled to allow nonzero boundary potential
+        #bc_O = DirichletBC(ME, (Constant(0.0),Constant(0.0)), u0_boundary)
 
         #g = Expression('cos((2*pi/lam)*cos(phi)*x[0]+(2*pi/lam)*sin(phi)*x[1])', degree = 1, phi=_phi, lam=_lam)
         g = Expression(('cos( (2*pi/lam)*(cos(phi)*x[0]+sin(phi)*x[1]) )','cos( (2*pi/lam)*(cos(phi)*x[0]+sin(phi)*x[1]) )'),
@@ -408,7 +410,9 @@ class RectangularSample(object):
 
         print("Attempting to solve:")
 
-        solve(a==L,z,[bc_O,bc_I])
+        #ASM2020.04.08 - disabled bc_O to allow nonzero boundary potential
+        #solve(a==L,z,[bc_O,bc_I])
+        solve(a==L,z,[bc_I])
 
         if to_plot:
             fig = plt.figure()
@@ -435,7 +439,7 @@ class RectangularSample(object):
 
         return z
 
-    def eigenvalue_target_solve(self,eigenvalue,sigma,number_extracted = 6, to_plot = False, density = 200):
+    def eigenvalue_target_solve(self,eigenvalue,sigma,number_extracted = 6,  density = 200):
         """Uses the SlepcEigensolver to solve the helmholtz equation on the pre-defined sample. Requires a specified eigenvalue
            to "target". Will extract up to number_extracted nearby eigenvalue, eigenvector pairs.
 
@@ -472,8 +476,11 @@ class RectangularSample(object):
         def u0_boundary(x, on_boundary):
             return on_boundary
 
+
+        #ASM2020.04.08 - disabled bc_O to allow nonzero boundary potential
         #Establishing the Boundary Conditions
-        bc = DirichletBC(V, Constant(0.0), u0_boundary)
+        #bc = DirichletBC(V, Constant(0.0), u0_boundary)
+        bc=[]
 
         bc_I = DirichletBC(V, Constant(1.0), boundaries, 2)
 
@@ -527,11 +534,13 @@ class RectangularSample(object):
             u.vector()[:] = rx
             eigenvalues.append(r)
             eigenfunctions.append(u)
-            plt.figure(); plot(u,interactive=True); plt.title("Eigenvalue: {}".format(r));plt.show()
+            
+            #ASM2020.04.08 - disabled plotting, it's dangerous when we'll have 10000 of eigenfunctions
+            #plt.figure(); plot(u,interactive=True); plt.title("Eigenvalue: {}".format(r));plt.show()
 
         return dict(list(zip(eigenvalues,eigenfunctions)))
 
-    def eigenvalue_solve(self,sigma, number_extracted = 6, to_plot = False, density = 200):
+    def eigenvalue_solve(self,sigma, number_extracted = 6, density = 200):
         """Uses the SlepcEigensolver to solve the helmholtz equation on the pre-defined sample. Requires a specified eigenvalue
            to "target". Will extract up to number_extracted nearby eigenvalue, eigenvector pairs.
 
@@ -616,8 +625,10 @@ class RectangularSample(object):
             u.vector()[:] = rx
             eigenvalues.append(r)
             eigenfunctions.append(u)
-            if to_plot:
-                plt.figure(); plot(u,interactive=True); plt.title("Eigenvalue: {}".format(r))
+            
+            #ASM2020.04.08 - disabled plotting, it's dangerous when we'll have 10000 of eigenfunctions
+            #if to_plot:
+            #    plt.figure(); plot(u,interactive=True); plt.title("Eigenvalue: {}".format(r))
 
         return dict(list(zip(eigenvalues,eigenfunctions)))
 

@@ -6,23 +6,90 @@ from scipy import special as sp
 from common import numerical_recipes as numrec
 from common.baseclasses import ArrayWithAxes as AWA
 import matplotlib.pyplot as plt
-from itertools import product
-from Utils import Progress, load_eigpairs
+from itertools import product,starmap
+from BokehPlasmons.tip_modeling.Utils import Progress, load_eigpairs
 
-def Calc(psi,psi_star):
+def UnscreenedCoulombKernel(x,y):
+                
+    return np.where((x==0)*(y==0),0,1/np.sqrt(x**2+y**2))
+
+def UnscreenedCoulombKernelFourier(kx,ky):
+                
+    return np.where((kx==0)*(ky==0),0,2*np.pi/np.sqrt(kx**2+ky**2))
+
+class CoulombConvolver(numrec.QuickConvolver):
     
-    result=myQC(psi)
-    result-=np.mean(result)
-    result[result==result.max()]=0
+    def __init__(self,xs,ys,kernel_func=UnscreenedCoulombKernel,bc='open'):
     
-    return np.sum((psi_star-np.mean(psi_star))*result)
+        dx=np.mean(np.abs(np.diff(xs)))
+        dy=np.mean(np.abs(np.diff(ys)))
+        
+        size=(xs.max()-xs.min(),\
+              ys.max()-ys.min()) #This is all enough to enable calculating kernel on appropriate origin-centered grid
+       
+        pad_mult=np.zeros((3,3))+1
+        #Use method of images to induce zero potential at boundaries
+        if bc=='closed':
+            pad_with='mirror'
+            pad_mult[0,1]=-1
+            pad_mult[1,0]=pad_mult[1,2]=-1
+            pad_mult[2,1]=-1
+        elif bc=='open':
+            pad_with=0
+        else: assert bc in ('open','closed')
+        
+        return super().__init__(size=size,kernel_function=kernel_func,\
+                                   shape=(len(xs),len(ys)),pad_by=.5,\
+                                   pad_with=pad_with,pad_mult=pad_mult)
+
+class CoulombConvolver2(numrec.QuickConvolver):
+    
+    def __init__(self,xs,ys,kernel_func_fourier=UnscreenedCoulombKernelFourier,bc='open'):
+    
+        size=(xs.max()-xs.min(),\
+              ys.max()-ys.min()) #This is all enough to enable calculating kernel on appropriate origin-centered grid
+       
+        pad_mult=np.zeros((3,3))+1
+        #Use method of images to induce zero potential at boundaries
+        if bc=='closed':
+            pad_with='mirror'
+            pad_mult[0,1]=-1
+            pad_mult[1,0]=pad_mult[1,2]=-1
+            pad_mult[2,1]=-1
+        elif bc=='open':
+            pad_with=0
+        else: assert bc in ('open','closed')
+        
+        return super().__init__(size=size,kernel_function_fourier=kernel_func_fourier,\
+                                   shape=(len(xs),len(ys)),pad_by=.5,\
+                                   pad_with=pad_with,pad_mult=pad_mult)
+
+# Because we somehow `multiprocessing.Pool` can only receive a module-level function??
+def apply_CC(psi):
+    
+    global CoulConv
+    result=CoulConv(psi)
+    result-=np.mean(result) #ensure charge neutrality
+    
+    return result
+
+def inner_prod(psi,psi_star):
+    
+    return np.sum(psi*psi_star)
 
 def mybessel(A,v,Q,x,y):
     r = np.sqrt(x**2+y**2)
     return A*sp.jv(v,Q*r)
 
-def planewave(qx,qy,x,y,x0=0,phi0=0):
-    return np.sin(qx*(x-x0)+qy*y+phi0)
+def dipolefield(x,y,z,direction=[0,1]):
+    "`direction` is a vector with `[\rho,z]` components"
+    
+    r=np.sqrt(x**2+y**2+z**2)
+    rho=np.sqrt(x**2+y**2)
+    rhat_rho=rho/r
+    rhat_z=z/r
+    
+    return (direction[0]*rhat_rho+direction[1]*rhat_z)/r**2
 
 class Translator:
     """
@@ -32,45 +99,47 @@ class Translator:
         a much larger xy mesh and then translating/truncating to the
         original mesh.  Nothing fancy, but good for performance.
     """
-
-    """
-        TODO: Something is going on that flips the x and y coordinates when plotting or translating.
-
-        Doesn't make much sense...
-    """
-
+    
     def __init__(self,
                  xs=np.linspace(-1,1,101),
                  ys=np.linspace(-1,1,101),
                  f = lambda x,y: sp.jv(0,np.sqrt(x**2+y**2))):
-
-        self.f = f
-
-        #Bookkeeping of the coordinate mesh
+        
+        self.f=f
+        
         self.xs,self.ys=xs,ys
-        self.shape=(len(xs),len(ys))
-        self.midx=self.xs[self.shape[0]//2]
-        self.midy=self.ys[self.shape[1]//2]
-        self.dx=np.max(self.xs)-np.min(self.xs)
-        self.dy=np.max(self.ys)-np.min(self.ys)
-
-        #Make a mesh grid twice bigger in each direction
-        bigshape=[2*N-1 for N in self.shape]
-        xs2grid,ys2grid=np.ogrid[-self.dx:+self.dx:bigshape[0]*1j,
-                                 -self.dy:+self.dy:bigshape[1]*1j]
-
-        self.bigF = self.f(xs2grid,ys2grid)
-
+        self.Nx,self.Ny=len(xs),len(ys)
+        try: self.dx=np.abs(np.diff(xs)[0])
+        except IndexError: self.dx=0
+        try: self.dy=np.abs(np.diff(ys)[0])
+        except IndexError: self.dy=0
+        self.xmin=np.min(xs)
+        self.ymin=np.min(ys)
+        
+        self.bigNx=2*self.Nx+1
+        self.bigNy=2*self.Ny+1
+        
+        self.bigXs,self.bigYs=np.ogrid[-self.dx*self.Nx:+self.dx*self.Nx:self.bigNx*1j,
+                                           -self.dy*self.Ny:+self.dy*self.Ny:self.bigNy*1j]
+        
+        self.bigF=self.f(self.bigXs,self.bigYs)
+        self.bigF/=np.sqrt(np.sum(self.bigF**2))
+        
     def __call__(self,x0,y0):
-        shift_by_dx=x0-self.midx
-        shift_by_dy=y0-self.midy
-        shift_by_nx=int(self.shape[0]*shift_by_dx/self.dx)
-        shift_by_ny=int(self.shape[1]*shift_by_dy/self.dy)
-        newJ=np.roll(np.roll(self.bigF,shift_by_nx,axis=0),\
-                     shift_by_ny,axis=1)
-        output = newJ[self.shape[0]//2:(3*self.shape[0])//2,\
-                     self.shape[1]//2:(3*self.shape[1])//2]
-        return AWA(output,axes=[self.xs,self.ys])
+        
+        if self.dx: x0bar=(x0-self.xmin)/self.dx
+        else: x0bar=0
+        if self.dy: y0bar=(y0-self.ymin)/self.dy
+        else: y0bar=0
+        
+        x0bar=int(x0bar)
+        y0bar=int(y0bar)
+        
+        
+        result=self.bigF[self.Nx-x0bar:2*self.Nx-x0bar,\
+                         self.Ny-y0bar:2*self.Ny-y0bar]
+        
+        return AWA(result,axes=[self.xs,self.ys])
 
 class TipResponse:
     """
@@ -89,13 +158,14 @@ class TipResponse:
         tip_eb = []
         N = self.N_tip_eigenbasis
         for n in range(N):
-            Q = (2*self.q*(n+1)/(N+1))
+            #Q = (2*self.q*(n+1)/(N+1))
+            Q=self.q*(n+1)
             #Q=n*self.q
             exp_prefactor = np.exp(-2*(n+1)/(N+1))
             A = exp_prefactor*Q**2
 
-            D=1 #The larger D goes, the longer range the tip excitation
-            func = lambda x,y: np.exp(-Q/D*np.sqrt(x**2+y**2))*mybessel(A,0,Q,x,y)
+            D=2 #The larger D goes, the longer range the tip excitation
+            func = lambda x,y: np.exp(-Q/D*np.sqrt(x**2+y**2))*mybessel(1,0,Q,x,y)
 
             tip_eb.append(Translator(xs=xs,ys=ys,f=func))
         return tip_eb
@@ -113,206 +183,182 @@ class SampleResponse:
         an input set of excitation functions.
     """
 
-    def __init__(self,eigpairs,E,N=100,debug=True):
+    def __init__(self,eigpairs,qp,Qfactor=100,N=100,\
+                 eigmultiplicity=None,\
+                 coulomb_shortcut=False,coulomb_bc='closed',\
+                 debug=True):
         # Setting the easy stuff
-        eigvals = list(eigpairs.keys())
-        eigfuncs = list(eigpairs.values())
+        
         self.debug = debug
-        self.xs,self.ys = eigfuncs[0].axes
-        self.eigfuncs = AWA(eigfuncs,\
-                          axes=[eigvals,self.xs,self.ys]).sort_by_axes()
-        self.eigvals = self.eigfuncs.axes[0]
-        self.phishape = self.eigfuncs[0].shape
-        self.E = E
-        self.N = N
+        self.N=N
 
         # Setting the various physical quantities
-        self._SetUseEigenvalues(E)
-        self._SetEnergy()
-        self._SetSigma(10,10)
-        self._SetCoulombKernel()
-        self._SetScatteringMatrix()
+        self._SetEigenbasis(eigpairs,eigmultiplicity)
+        self._TuneEigenbasis(qp)
+        #self._SetSigma(10,10)
+        self._SetAlpha(Qfactor)
+        self._SetCoulombKernel(shortcut=coulomb_shortcut,\
+                               bc=coulomb_bc)
+        self._SetReflectionMatrix(qp)
+        
+    def _SetEigenbasis(self,eigpairs,eigmultiplicity=None):
+        
+        print('Setting Eigenbasis...')
+        if not eigmultiplicity: eigmultiplicity={}
+        eigvals = sorted(list(eigpairs.keys()))
+        
+        #Normalize the eigenfunctions, and apply any multiplicity!
+        eigfuncs=[]; eigmult=[]
+        for eigval in eigvals:
+            
+            #normalize
+            eigfunc=np.array(eigpairs[eigval])
+            eigfunc=eigfunc/np.sqrt(np.sum(eigfunc**2))
+                
+            eigfuncs.append(eigfunc)
+            if eigval in eigmultiplicity:
+                eigmult.append(eigmultiplicity[eigval])
+            else: eigmult.append(1)
+            
+        self.xs,self.ys = eigpairs[eigval].axes
+        self.eigfuncs = AWA(eigfuncs,\
+                            axes=[eigvals,self.xs,self.ys])
+        self.eigvals = self.eigfuncs.axes[0] #sorted
+        self.eigmult=AWA(eigmult,axes=[eigvals])
 
-        self.Us = []
-
-    def _SetEnergy(self):
-        """
-            TODO: check energy units and sqrt eigenvals
-        """
-        if self.debug: print('Setting Energy')
-        self.Phis=np.matrix([eigfunc.ravel() for eigfunc in self.use_eigfuncs])
-        self.Q = np.diag(self.use_eigvals)
-
-    def _SetUseEigenvalues(self, E):
-        if self.debug: print('Setting Use Eigenvalues')
-        index=np.argmin(np.abs(np.sqrt(self.eigvals)-E)) #@ASM2019.12.22 - This is to treat `E` not as the squared eigenvalue, but in units of the eigenvalue (`q_omega)
+    def _TuneEigenbasis(self,qp):
+        
+        if self.debug: print('Tuning Eigenbasis...')
+        
+        index=np.argmin(np.abs(self.eigvals-np.abs(qp)**2)) #@ASM2019.12.22 - This is to treat `E` not as the squared eigenvalue, but in units of the eigenvalue (`q_omega)
         ind1=np.max([index-self.N//2,0])
         ind2=ind1+self.N
-        print(ind1,ind2)
         if ind2>len(self.eigfuncs):
             ind2 = len(self.eigfuncs)+1
             ind1 = ind2-self.N
         if ind1<0: ind1=0
         self.use_eigfuncs=self.eigfuncs[ind1:ind2]
         self.use_eigvals=self.eigvals[ind1:ind2]
-        self.N=len(self.eigfuncs) #Just in case it was less than the originally provided `N`
+        self.use_eigmult=self.eigmult[ind1:ind2]
+        self.N=len(self.use_eigfuncs) #Just in case it was less than the originally provided `N`
+        
+        self.Us = np.matrix([eigfunc.ravel() for eigfunc in self.use_eigfuncs]).T
+        self.Qs2 = np.diag(self.use_eigvals)
+        
+    def _SetAlpha(self,Qfactor=50):
+        
+        #We have that `angle(alpha)=-arctan2(qp2,qp1)=-arctan2(1,Q)`
+        self.alpha=np.exp(-1j*np.arctan2(1,Qfactor))
 
-    def _SetSigma(self,L,lamb):
-        if self.debug: print('Setting Sigma')
-
-        #self.sigma = PM.S()
-        #self.sigma.set_sigma_values(lamb, L)
-        #sigma_tilde = self.sigma.get_sigma_values()[0]+1j*self.sigma.get_sigma_values()[1]
-        #self.alpha = -1j*sigma_tilde/np.abs(sigma_tilde)
-
-        """
-            TODO: Do we need to change this? As of 2019.12.21, this was a placeholder
-        """
-        self.alpha = 1 #@ASM2019.12.21 just for nwo we put the 'complexity' into input `E`, until we get serious about recasting it to `q_omega`
-
-    def _SetCoulombKernel(self):
+    def _SetCoulombKernel(self,shortcut=False,bc='open',multiprocess=True):
         """
             TODO: I hacked this together in some crazy way to force multiprocessing.Pool to work...
                     Needs to be understood and fixed
         """
-        if self.debug: print('Setting Kernel')
-        poorman = False
-        self.V_nm = np.zeros([len(self.use_eigvals), len(self.use_eigvals)])
-        if not poorman:
+        
+        if shortcut:
+            if self.debug: print('Applying Coulomb kernel (with shortcut)...')
+            self.use_Veigfuncs=[2*np.pi/np.sqrt(eigval)*eigfunc \
+                                for eigval,eigfunc in zip(self.use_eigvals,self.use_eigfuncs)]
+            self.V_mn=np.matrix(np.diag(2*np.pi/np.sqrt(self.use_eigvals)))
+            self.V_mn[np.isnan(self.V_mn)]=0
+            #no need to ravel, just appropriate `self.Phis`
+            self.Ws=self.Us @ self.V_mn
+        
+        if not shortcut:
             eigfuncs = self.use_eigfuncs
             
-            #The regularizer `dx*dy` will only influence the mean value of convolved functions
-            dx=np.mean(np.abs(np.diff(self.xs)))
-            dy=np.mean(np.abs(np.diff(self.xs)))
-            kern_func = lambda x,y: 1/np.sqrt(x**2+y**2+0.1*dx*dy)
+            global CoulConv
+            CoulConv=CoulombConvolver2(self.xs,self.ys,bc=bc)
+                
+            if self.debug: print('Applying Coulomb kernel...')
+            #Need a with statement, otherwise an abort fails to close processes and seems to crash the interpreter
+            if multiprocess: 
+                with mp.Pool(8) as self.Pool:
+                    self.use_Veigfuncs=list(self.Pool.map(apply_CC,eigfuncs))
+                    self.Ws=np.matrix([Veigfunc.ravel() for Veigfunc in self.use_Veigfuncs]).T
+                    self.V_mn=list(self.Pool.starmap(inner_prod,\
+                                                     product(list(self.use_eigfuncs),list(self.use_Veigfuncs))))
+            else:
+                self.use_Veigfuncs=list(map(apply_CC,eigfuncs))
+                self.Ws=np.matrix([Veigfunc.ravel() for Veigfunc in self.use_Veigfuncs]).T
+                self.V_mn=list(starmap(inner_prod,product(list(self.use_eigfuncs),list(self.use_Veigfuncs))))
             
-            size=(self.xs.max()-self.xs.min(),\
-                  self.ys.max()-self.ys.min())
-            global myQC
-            myQC=numrec.QuickConvolver(size=size,kernel_function=kern_func,\
-                                       shape=eigfuncs[0].shape,pad_by=.5,pad_with=0)
-            #myQC=numrec.QuickConvolver(size=size,kernel_function=kern_func,\
-            #                           shape=eigfuncs[0].shape,pad_by=0,pad_with=0)
-            p = mp.Pool(8)
-            self.V_nm = np.array(p.starmap(Calc,product(eigfuncs,eigfuncs))).reshape((self.N,self.N))
-            #plt.figure(); plt.plot(np.abs(np.diag(self.V_nm))); plt.show();
-        else:
-            for i,v in enumerate(self.use_eigvals):
-                #see for instance: https://www.physicsforums.com/threads/2d-fourier-transform-of-coulomb-potenial.410079/
-                self.V_nm[i,i] = 2*np.pi/np.sqrt(v)
+            self.V_mn=np.matrix(np.array(self.V_mn).reshape((self.N,)*2))
+            self.V_mn=(self.V_mn+self.V_mn.T)/2
 
-    def _SetScatteringMatrix(self):
-        if self.debug: print('Setting Scattering Matrix')
-        self.D = self.E*np.linalg.inv(self.E*np.identity(self.Q.shape[0]) - self.alpha*self.Q.dot(self.V_nm))
+    def _SetReflectionMatrix(self,qp,diag=True):
+        if self.debug: print('Computing Reflection Matrix...')
+        
+        self.qp=qp
+        
+        if diag: V=np.diag(np.diag(self.V_mn))
+        else: V=self.V_mn
+        
+        #@ASM2020.04.03: Minus comes from need to define reflection coefficient for Ez field
+        num=-self.alpha/(2*np.pi)*(self.Qs2)
+        inv=np.linalg.inv(self.qp*np.identity(self.Qs2.shape[0]) \
+                          -self.alpha/(2*np.pi)*(V @ self.Qs2))
+        
+        self.R_mn = inv @ num
+        
+        #Weight matrix elements by multiplicity of the eigenfunction
+        Mult=np.diag(self.use_eigmult)
+        self.R_mn = self.R_mn @ Mult
+        
+        #self.R_rmrn = self.Ws @ self.R_mn @ self.Us.T
 
-    def GetRAlphaBeta(self,tip_eigenbasis):
-        Psi=np.matrix([eigfunc.ravel() for eigfunc in tip_eigenbasis]) #Only have to unravel sample eigenfunctions once (twice speed-up)
-        U=Psi*self.Phis.T
-        self.Us.append(U)
-        U_inv = np.linalg.pinv(U) #@ASM2019.12.21 good to use inverse, since tip-basis may not be orthogonal
-        result=np.dot(U,np.dot(self.D,U_inv))
-        return result
+    def GetReflectionCoefficient(self,tip_eigenbasis):
+        
+        self.Psis=np.matrix([eigfunc.ravel() for eigfunc in tip_eigenbasis]).T #Only have to unravel sample eigenfunctions once (twice speed-up)
+        self.PsisInv=np.linalg.pinv(self.Psis)
+        
+        self.P_nk = self.Us.T @ self.Psis
+        self.P_jm = self.PsisInv @ self.Ws
 
-    def __call__(self,excitations,U,tip_eigenbasis):
+        self.R_jk = self.P_jm @ self.R_mn @  self.P_nk
+        #self.R_jk = self.PsisInv @ self.R_rmrn @ self.Psis
+        
+        return self.R_jk
+
+    def __call__(self,excitations):#,U,tip_eigenbasis):
+        """This will evaluate the total potential"""
+        
         if np.array(excitations).ndim==2: excitations=[excitations]
-        Exc=np.array([exc.ravel() for exc in excitations])
-        tip_eb=np.matrix([eigfunc.ravel() for eigfunc in tip_eigenbasis])
-        projected_result=np.dot(tip_eb.T,
-                            np.dot(U,\
-                                np.dot(self.D,\
-                                    np.dot(self.Phis,Exc.T))))
+        Exc=np.matrix([exc.ravel() for exc in excitations]).T
+        #tip_eb=np.array([eigfunc.ravel() for eigfunc in tip_eigenbasis])
+        #projected_result=np.dot(tip_eb.T,
+        #                    np.dot(U,\
+        #                        np.dot(self.S,\
+        #                            np.dot(self.Phis,Exc.T))))
         #plt.figure();plt.imshow(np.abs(result.reshape(101,101)));plt.show()
 
         #These are all the matrices that get multiplied, take a look that shapes work...
         #print([item.shape for item in [self.Phis.T,self.D,self.Phis,Exc.T]])
         #result is in form of column vectors
         #turn into row vectors then reshape
-        result=np.dot(self.Phis.T,\
-                       np.dot(self.D,\
-                             np.dot(self.Phis,Exc.T)))
-        result=np.array(result).T.reshape((len(excitations),)+self.phishape)
-        projected_result=np.array(projected_result).T.reshape((len(excitations),)+self.phishape)
-        return AWA(result,axes=[None,self.xs,self.ys]).squeeze(), AWA(projected_result,axes=[None,self.xs,self.ys]).squeeze()
-
-def TestScatteringBasisChange(q=44,\
-                           E=44*np.exp(1j*2*np.pi*5e-2),\
-                           N_sample_eigenbasis=100,\
-                           N_tip_eigenbasis = 10):
-
-    global Responder,Tip,R_alphabeta,eigpairs
-
-    Responder = SampleResponse(eigpairs,E=E,N=N_sample_eigenbasis)
-    xs,ys = Responder.xs,Responder.ys
-    Tip = TipResponse(xs,ys,q=q,N_tip_eigenbasis=N_tip_eigenbasis)
-
-    betaz_alpha = np.diag((2-.1j)*(np.arange(N_tip_eigenbasis)+1))
-    Lambdaz_beta = ((1+np.arange(N_tip_eigenbasis))[::-1])
-
-    Ps=np.zeros((len(xs),len(ys)))
-    Rs=np.zeros((len(xs),len(ys)))
-    last = 0
-    for i,x0 in enumerate(xs):
-        for j,y0 in enumerate(ys):
-            start = time.time()
-
-            tip_eigenbasis = Tip(x0,y0)
-            R_alphabeta = Responder.GetRAlphaBeta(tip_eigenbasis)
-            Ps[i,j] = np.sum(np.linalg.inv(betaz_alpha-R_alphabeta).dot(Lambdaz_beta))
-            Rs[i,j] = np.sum(np.diag(R_alphabeta))/N_tip_eigenbasis
-
-            last = Progress(i,len(xs),last)
-
-            #if i==0 and j==0:
-            #    plt.figure()
-            #    plt.imshow(np.abs(R_alphabeta))
-            #    plt.show()
-
-    return {'P':Ps,'R':Rs}
-
-show_eigs = False
-run_test = True
-global eigpairs
-xs,ys = np.arange(101), np.arange(101); L=xs.max()
-xv,yv = np.meshgrid(xs,ys)
-#eigpairs = load_eigpairs(basedir="../sample_eigenbasis_data")
-eigpairs = {}
-
-Nqs=100
-graphene_ribbon=True
-if graphene_ribbon:
-    
-    q0=np.pi/L #This is for particle in box (allowed wavelength is n*2*L)
-    for n in range(1,Nqs+1):
-        qx = n*q0
-        pw = AWA(planewave(qx,0,xv,yv,x0=0,phi0=pi/2), axes = [xs,ys]) #cosine waves, this is for 
-        eigpairs[qx**2]=pw/np.sqrt(np.sum(pw**2))
         
-else:
-
-    q0=2*np.pi/L #This is for infinite sample
-    for n in range(1,Nqs+1):
-        qx = n*q0
-        pw = AWA(planewave(qx,0,xv,yv,x0=0,phi0=np.pi/2), axes = [xs,ys]) #cosine waves
-        eigpairs[qx**2]=pw/np.sqrt(np.sum(pw**2))
+        self.P_nk = self.Us.T @ Exc
+        result=self.Ws @ self.R_mn @ self.P_nk
         
-        pw2 = AWA(planewave(qx,0,xv,yv,x0=0,phi0=0), axes = [xs,ys]) #sine waves, This is for infinite sample
-        eigpairs[qx**2+1e-9]=pw2/np.sqrt(np.sum(pw2**2)) #This is for infinite sample
-    
-if show_eigs:
-    for i,q in enumerate(list(eigpairs.keys())):
-        if i<5:
-            plt.figure()
-            plt.imshow(eigpairs[q])
-            plt.title("q={}".format(q))
-    plt.show()
+        result=np.array(result).T.reshape((len(excitations),\
+                                           len(self.xs),len(self.ys)))
+        #projected_result=np.array(projected_result).T.reshape((len(excitations),)+self.phishape)
+        
+        return AWA(result,axes=[None,self.xs,self.ys],\
+                   axis_names=['Excitation index','x','y']).squeeze() #, AWA(projected_result,axes=[None,self.xs,self.ys]).squeeze()
 
-if run_test:
-    q=2*np.pi/L*20
-    #Responder = SampleResponse(eigpairs,E=q,N=100)
+    def getXYGrids(self):
+        
+        Xs=self.xs
+        Ys=self.ys
+        
+        Xs=Xs.reshape((len(Xs),1))
+        Ys=Ys.reshape((1,len(Ys)))
+        
+        return Xs,Ys
     
-    d=TestScatteringBasisChange(E=q*np.exp(1j*2*np.pi*5e-2),q=q,N_tip_eigenbasis=3)
-    plt.figure()
-    plt.imshow(np.abs(d['P'])); plt.title('P');plt.colorbar()
-    plt.figure()
-    plt.imshow(np.abs(d['R'])); plt.title('R');plt.colorbar()
-    plt.show()
+    
+        
+        
+        
