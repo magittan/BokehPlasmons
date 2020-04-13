@@ -689,6 +689,10 @@ class S(object):
         Sigma term parameters, reference equations in Rodin/accompanying manuscript
     """
 
+    def __init__(self, s1=1, s2=1):
+        self.sigma_1 = s1
+        self.sigma_2 = s2
+
     def set_sigma_values(self,lambda_r,L_i):
         """Determines real and imaginary parts of sigma. (Re) sigma_1 and (Im) sigma_2.
 
