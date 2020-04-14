@@ -55,6 +55,7 @@ def process_fenics_function(mesh,fenics_function, x_axis=np.linspace(0,1,100), y
         Masked Numpy Array with the required eigenfunction
     """
     V = FunctionSpace(mesh, 'CG', 1)
+    fenics_function.set_allow_extrapolation(True)
     fenics_function = interpolate(fenics_function, V)
 
     C = fenics_function.compute_vertex_values(mesh)
@@ -64,7 +65,8 @@ def process_fenics_function(mesh,fenics_function, x_axis=np.linspace(0,1,100), y
     test = tri.LinearTriInterpolator(mesh2triang(mesh),C)(xv,yv)
 
     if to_plot:
-        plt.imshow(test,cmap='seismic')
+        plt.imshow(test,cmap='seismic', origin="lower")
+        plt.show()
 
     return test
 
@@ -131,17 +133,17 @@ def plot_fenics(z):
     #         cbar_ax = fig.add_axes([0.85, 0.15, 0.05, 0.7])
     #         fig.colorbar(plt.subplot(133), cax=cbar_ax)
     plt.show()
-    
+
 ##################### FUNCTIONS FOR ROTATING OBJECTS ##########################
 #--------------------------------------------------------------------------------------------------------------------------------#
 
 def calculated_centroid(vertices):
     """
     Function meant for calculating the centroid of a 2D polygon
-    
+
     Args:
         vertices (list): list of pairs of vertices
-        
+
     Returns:
         centroids (list): [x_centroid, y_centroid]
     """
@@ -149,17 +151,17 @@ def calculated_centroid(vertices):
     for i in vertices:
         x_value += i[0]
         y_value += i[1]
-    
+
     return [x_value/len(vertices),y_value/len(vertices)]
-    
+
 def rotate_object(vertices_list, rotation_degrees):
     """
     Function meant for rotating a 2D polygon
-    
+
     Args:
         vertices (list): list of pairs of vertices
         rotation_degrees (float): degree amount to rotate the vertices by
-        
+
     Returns:
         output_vertices (list): list of pairs of vertices after being rotated
     """
@@ -173,13 +175,13 @@ def rotate_object(vertices_list, rotation_degrees):
 
 def center_then_rotate(vertices, rotation_degrees):
     """
-    Function to first center then rotate the vertices then transform it back. Otherwise the rotation 
+    Function to first center then rotate the vertices then transform it back. Otherwise the rotation
     would be around the origin.
-    
+
     Args:
         vertices (list): list of pairs of vertices
         rotation_degrees (float): degree amount to rotate the vertices by
-        
+
     Return:
         modified_vertices (list): list of pairs of vertices after being centered, rotated, then transformed back
     """
@@ -189,16 +191,16 @@ def center_then_rotate(vertices, rotation_degrees):
     modified_vertices = [np.array(i)-centroid for i in vertices]
     modified_vertices=rotate_object(modified_vertices,rotation_degrees)
     modified_vertices = [np.array(i)+centroid for i in modified_vertices]
-    
+
     return modified_vertices
 
 def counter_clockwise_sort(vertices):
     """
     Function to remedy the error given when Fenics needs the vertices in counterclockwise order
-    
+
     Args:
         vertices (list): list of pairs of vertices
-        
+
     Return:
         output (list): list of pairs of vertices after being centered, rotated, then transformed back
     """

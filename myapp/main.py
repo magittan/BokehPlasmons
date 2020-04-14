@@ -333,12 +333,6 @@ rectangular_pretext =  Div(text='Rectangular Reflectors/Sources', style={"font-f
 #rotation_pretext =  PreText(text='Rotation (Degrees)', width=300)
 #simulation_params_pretext =  PreText(text='Rotation (Degrees)', width=300)
 
-# Sliders
-circular_radius = Slider(title = 'Radius',value = 2, start = 1, end = 10, step = 1,width=200)
-rectangular_width = Slider(title = 'Width',value = 8, start = 1, end = 10, step = 1,width=200)
-rectangular_height = Slider(title = 'Height',value = 2, start = 1, end = 10, step = 1,width=200)
-rotation = Slider(title = 'Rotation (Degrees)',value = 0, start = 0, end = 360, step = 15,width=200)
-
 # Text Input
 mesh_width_input = TextInput(value='50', title='Mesh Width', width=100)
 mesh_height_input = TextInput(value='50', title='Mesh Height', width=100)
@@ -347,6 +341,13 @@ plasmon_wavelength_input = TextInput(value='4', title='Plasmon '+u"\u03BB", widt
 mesh_density_input = TextInput(value='100', title='Mesh Density',width=200)
 lambda_input = TextInput(value='100', title='Excitation '+u"\u03BB",width=100)
 phi_input = TextInput(value='90', title='Excitation '+u"\u03B8",width=100)
+
+# Sliders
+slider_end_value = min(int(mesh_width_input.value), int(mesh_height_input.value))
+circular_radius = Slider(title = 'Radius',value = 2, start = 1, end = slider_end_value, step = 1,width=200)
+rectangular_width = Slider(title = 'Width',value = 8, start = 1, end = slider_end_value, step = 1,width=200)
+rectangular_height = Slider(title = 'Height',value = 2, start = 1, end = slider_end_value, step = 1,width=200)
+rotation = Slider(title = 'Rotation (Degrees)',value = 0, start = 0, end = 360, step = 15,width=200)
 
 # Buttons
 undo_button = Button(label='Undo Last Placement', width = 200)

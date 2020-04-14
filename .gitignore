@@ -4,3 +4,4 @@ __pycache__/*
 .ipynb_checkpoints/
 *.bak
 *.pyc
+.DS_Store
