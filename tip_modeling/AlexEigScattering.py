@@ -10,15 +10,12 @@ from itertools import product,starmap
 from Utils import Progress, load_eigpairs
 
 def UnscreenedCoulombKernel(x,y):
-
     return np.where((x==0)*(y==0),0,1/np.sqrt(x**2+y**2))
 
 def UnscreenedCoulombKernelFourier(kx,ky):
-
     return np.where((kx==0)*(ky==0),0,2*np.pi/np.sqrt(kx**2+ky**2))
 
 class CoulombConvolver(numrec.QuickConvolver):
-
     def __init__(self,xs,ys,kernel_func=UnscreenedCoulombKernel,bc='open'):
 
         dx=np.mean(np.abs(np.diff(xs)))
@@ -43,7 +40,6 @@ class CoulombConvolver(numrec.QuickConvolver):
                                    pad_with=pad_with,pad_mult=pad_mult)
 
 class CoulombConvolver2(numrec.QuickConvolver):
-
     def __init__(self,xs,ys,kernel_func_fourier=UnscreenedCoulombKernelFourier,bc='open'):
 
         size=(xs.max()-xs.min(),\
@@ -66,7 +62,6 @@ class CoulombConvolver2(numrec.QuickConvolver):
 
 # Because we somehow `multiprocessing.Pool` can only receive a module-level function??
 def apply_CC(psi):
-
     global CoulConv
     result=CoulConv(psi)
     result-=np.mean(result) #ensure charge neutrality
@@ -74,7 +69,6 @@ def apply_CC(psi):
     return result
 
 def inner_prod(psi,psi_star):
-
     return np.sum(psi*psi_star)
 
 def mybessel(A,v,Q,x,y):
