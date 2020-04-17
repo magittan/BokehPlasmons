@@ -34,5 +34,5 @@ def mybessel(A,v,Q,x,y):
     r = np.sqrt(x**2+y**2)
     return A*sp.jv(v,Q*r)
 
-def planewave(qx,qy,x,y,x0=0,phi0=0):
-    return np.sin(qx*(x-x0)+qy*y+phi0)
+def planewave(qx,qy,x,y,x0=0,y0=0,phi0=0):
+    return np.sin(qx*(x-x0)+qy*(y-y0)+phi0)

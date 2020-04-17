@@ -9,11 +9,11 @@ from common import numerical_recipes as numrec
 from common.baseclasses import ArrayWithAxes as AWA
 import matplotlib.pyplot as plt
 from itertools import product
-from Utils import Progress, load_eigpairs
+from Utils import Progress, load_eigpairs ,planewave
 import pickle
 
-
-def load_eigpairs(name='UnitSquareMesh_101x101x2000_Neumann_eigenbasis.pickle'):
+"""
+def load_eigpairs(name='UnitSquareMesh_100x100_1000_eigenbasis.h5'):
 
     filepath=os.path.join(os.path.dirname(__file__),'..',\
                         'sample_eigenbasis_data',name)
@@ -25,10 +25,7 @@ def load_eigpairs(name='UnitSquareMesh_101x101x2000_Neumann_eigenbasis.pickle'):
     eigpairs=dict([(E.axes[0][i],E[i]) for i in range(len(E))])
 
     return eigpairs
-
-def planewave(qx,qy,x,y,x0=0,y0=0,phi0=0):
-
-    return np.sin(qx*(x-x0)+qy*(y-y0)+phi0)
+"""
 
 def build_rect_eigpairs(Lx=12,Rx=10,Ry=10,Nx=150,Ly=12,Nqmax=None):
 
@@ -160,9 +157,11 @@ def RasterScanTip(xs=None,ys=None,\
                     Qfactor=50,\
                     eigmultiplicity={},\
                      N_sample_eigenbasis=100,\
-                    coulomb_shortcut=True):
+                    coulomb_shortcut=False):
 
     global TipEigenbasis
+    if eigpairs is None:
+        eigpairs = build_rect_eigpairs()
 
     if Responder is None:
         Responder = AES.SampleResponse(eigpairs,qp=qp,Qfactor=Qfactor,\
@@ -185,6 +184,8 @@ def RasterScanTip(xs=None,ys=None,\
     Ps=np.zeros((len(xs),len(ys)),dtype=np.complex)
     Rs=np.zeros((len(xs),len(ys)),dtype=np.complex)
     last = 0
+    print("Raster scanning tip...")
+    start = time.time()
     for i,x0 in enumerate(xs):
         for j,y0 in enumerate(ys):
 
@@ -203,7 +204,7 @@ def RasterScanTip(xs=None,ys=None,\
             #    plt.figure()
             #    plt.imshow(np.abs(R_alphabeta))
             #    plt.show()
-
+    print("\tTime elapsed:{}".format(time.time()-start))
     return {'P':AWA(Ps,axes=[xs,ys],axis_names=['x','y']).squeeze(),\
             'R':AWA(Rs,axes=[xs,ys],axis_names=['x','y']).squeeze(),\
             'Responder':Responder}
@@ -263,3 +264,5 @@ def LinescanSweepingQp(wltip=1,N_tip_eigenbasis=1,
     Ps=AWA(Ps); Ps.adopt_axes(Rs)
 
     return dict(P=Ps,R=Rs,Responder=Responder)
+
+RasterScanTip()

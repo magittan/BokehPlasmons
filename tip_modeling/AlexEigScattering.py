@@ -7,7 +7,7 @@ from common import numerical_recipes as numrec
 from common.baseclasses import ArrayWithAxes as AWA
 import matplotlib.pyplot as plt
 from itertools import product,starmap
-from Utils import Progress, load_eigpairs
+from Utils import Progress, load_eigpairs, mybessel
 
 def UnscreenedCoulombKernel(x,y):
     return np.where((x==0)*(y==0),0,1/np.sqrt(x**2+y**2))
@@ -39,6 +39,7 @@ class CoulombConvolver(numrec.QuickConvolver):
                                    shape=(len(xs),len(ys)),pad_by=.5,\
                                    pad_with=pad_with,pad_mult=pad_mult)
 
+# Use this one
 class CoulombConvolver2(numrec.QuickConvolver):
     def __init__(self,xs,ys,kernel_func_fourier=UnscreenedCoulombKernelFourier,bc='open'):
 
@@ -60,7 +61,7 @@ class CoulombConvolver2(numrec.QuickConvolver):
                                    shape=(len(xs),len(ys)),pad_by=.5,\
                                    pad_with=pad_with,pad_mult=pad_mult)
 
-# Because we somehow `multiprocessing.Pool` can only receive a module-level function??
+# Because somehow `multiprocessing.Pool` can only receive a module-level function??
 def apply_CC(psi):
     global CoulConv
     result=CoulConv(psi)
@@ -70,10 +71,6 @@ def apply_CC(psi):
 
 def inner_prod(psi,psi_star):
     return np.sum(psi*psi_star)
-
-def mybessel(A,v,Q,x,y):
-    r = np.sqrt(x**2+y**2)
-    return A*sp.jv(v,Q*r)
 
 def dipolefield(x,y,z,direction=[0,1]):
     "`direction` is a vector with `[\rho,z]` components"
@@ -152,9 +149,7 @@ class TipResponse:
         tip_eb = []
         N = self.N_tip_eigenbasis
         for n in range(N):
-            #Q = (2*self.q*(n+1)/(N+1))
             Q=self.q*(n+1)
-            #Q=n*self.q
             exp_prefactor = np.exp(-2*(n+1)/(N+1))
             A = exp_prefactor*Q**2
 
@@ -182,14 +177,12 @@ class SampleResponse:
                  coulomb_shortcut=False,coulomb_bc='closed',\
                  debug=True):
         # Setting the easy stuff
-
         self.debug = debug
         self.N=N
 
         # Setting the various physical quantities
         self._SetEigenbasis(eigpairs,eigmultiplicity)
         self._TuneEigenbasis(qp)
-        #self._SetSigma(10,10)
         self._SetAlpha(Qfactor)
         self._SetCoulombKernel(shortcut=coulomb_shortcut,\
                                bc=coulomb_bc)
@@ -198,6 +191,8 @@ class SampleResponse:
     def _SetEigenbasis(self,eigpairs,eigmultiplicity=None):
 
         print('Setting Eigenbasis...')
+        start = time.time()
+        # For degeneracy
         if not eigmultiplicity: eigmultiplicity={}
         eigvals = sorted(list(eigpairs.keys()))
 
@@ -219,11 +214,12 @@ class SampleResponse:
                             axes=[eigvals,self.xs,self.ys])
         self.eigvals = self.eigfuncs.axes[0] #sorted
         self.eigmult=AWA(eigmult,axes=[eigvals])
+        print("\tTime elapsed:{}".format(time.time()-start))
 
     def _TuneEigenbasis(self,qp):
 
         if self.debug: print('Tuning Eigenbasis...')
-
+        start = time.time()
         index=np.argmin(np.abs(self.eigvals-np.abs(qp)**2)) #@ASM2019.12.22 - This is to treat `E` not as the squared eigenvalue, but in units of the eigenvalue (`q_omega)
         ind1=np.max([index-self.N//2,0])
         ind2=ind1+self.N
@@ -238,18 +234,18 @@ class SampleResponse:
 
         self.Us = np.matrix([eigfunc.ravel() for eigfunc in self.use_eigfuncs]).T
         self.Qs2 = np.diag(self.use_eigvals)
+        print("\tTime elapsed:{}".format(time.time()-start))
 
     def _SetAlpha(self,Qfactor=50):
-
         #We have that `angle(alpha)=-arctan2(qp2,qp1)=-arctan2(1,Q)`
         self.alpha=np.exp(-1j*np.arctan2(1,Qfactor))
 
-    def _SetCoulombKernel(self,shortcut=False,bc='open',multiprocess=True):
+    def _SetCoulombKernel(self,shortcut=False,bc='open',multiprocess=False):
         """
             TODO: I hacked this together in some crazy way to force multiprocessing.Pool to work...
                     Needs to be understood and fixed
         """
-
+        start = time.time()
         if shortcut:
             if self.debug: print('Applying Coulomb kernel (with shortcut)...')
             self.use_Veigfuncs=[2*np.pi/np.sqrt(eigval)*eigfunc \
@@ -265,7 +261,7 @@ class SampleResponse:
             global CoulConv
             CoulConv=CoulombConvolver2(self.xs,self.ys,bc=bc)
 
-            if self.debug: print('Applying Coulomb kernel...')
+            if self.debug: print('Applying Coulomb kernel (without shortcut)...')
             #Need a with statement, otherwise an abort fails to close processes and seems to crash the interpreter
             if multiprocess:
                 with mp.Pool(8) as self.Pool:
@@ -280,10 +276,11 @@ class SampleResponse:
 
             self.V_mn=np.matrix(np.array(self.V_mn).reshape((self.N,)*2))
             self.V_mn=(self.V_mn+self.V_mn.T)/2
+        print("\tTime elapsed:{}".format(time.time()-start))
 
     def _SetReflectionMatrix(self,qp,diag=True):
         if self.debug: print('Computing Reflection Matrix...')
-
+        start = time.time()
         self.qp=qp
 
         if diag: V=np.diag(np.diag(self.V_mn))
@@ -299,6 +296,7 @@ class SampleResponse:
         #Weight matrix elements by multiplicity of the eigenfunction
         Mult=np.diag(self.use_eigmult)
         self.R_mn = self.R_mn @ Mult
+        print("\tTime elapsed:{}".format(time.time()-start))
 
         #self.R_rmrn = self.Ws @ self.R_mn @ self.Us.T
 
@@ -320,24 +318,11 @@ class SampleResponse:
 
         if np.array(excitations).ndim==2: excitations=[excitations]
         Exc=np.matrix([exc.ravel() for exc in excitations]).T
-        #tip_eb=np.array([eigfunc.ravel() for eigfunc in tip_eigenbasis])
-        #projected_result=np.dot(tip_eb.T,
-        #                    np.dot(U,\
-        #                        np.dot(self.S,\
-        #                            np.dot(self.Phis,Exc.T))))
-        #plt.figure();plt.imshow(np.abs(result.reshape(101,101)));plt.show()
-
-        #These are all the matrices that get multiplied, take a look that shapes work...
-        #print([item.shape for item in [self.Phis.T,self.D,self.Phis,Exc.T]])
-        #result is in form of column vectors
-        #turn into row vectors then reshape
-
         self.P_nk = self.Us.T @ Exc
         result=self.Ws @ self.R_mn @ self.P_nk
 
         result=np.array(result).T.reshape((len(excitations),\
                                            len(self.xs),len(self.ys)))
-        #projected_result=np.array(projected_result).T.reshape((len(excitations),)+self.phishape)
 
         return AWA(result,axes=[None,self.xs,self.ys],\
                    axis_names=['Excitation index','x','y']).squeeze() #, AWA(projected_result,axes=[None,self.xs,self.ys]).squeeze()

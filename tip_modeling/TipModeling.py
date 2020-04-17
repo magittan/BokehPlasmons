@@ -205,15 +205,16 @@ class SampleResponse:
         last = 0
 
         # Raster scanning over all xs and ys
+        start = time.time()
         for i,x0 in enumerate(self.xs):
             for j,y0 in enumerate(self.ys):
-                start = time.time()
 
                 tip_eigenbasis = Tip(x0,y0)
                 R_alphabeta = self.GetRAlphaBeta(tip_eigenbasis)
                 Ps[i,j] = np.sum(np.linalg.inv(betaz_alpha-R_alphabeta).dot(Lambdaz_beta))
                 Rs[i,j] = np.sum(np.diag(R_alphabeta))/Tip.N_tip_eigenbasis
                 last = Progress(i,len(self.xs),last)
+        print("\tTime elapsed:{}".format(time.time()-start))
 
         return {'P':Ps,'R':Rs}
 
