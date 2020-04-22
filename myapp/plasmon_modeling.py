@@ -9,7 +9,7 @@ import math
 import random
 import FenicsTools as FT
 import numpy as np
-from Toolbox import *
+from toolbox import *
 
 #       ___           ___       ___           ___           ___           ___           ___           ___
 #      /\  \         /\__\     /\  \         /\  \         /\__\         /\  \         /\__\         /\  \
@@ -120,7 +120,7 @@ class RectangularSample(object):
         Returns:
             RectangularSample object
         """
-        
+
         self.width = width
         self.height = height
         self.domain = Rectangle(Point(0, 0),
@@ -371,7 +371,7 @@ class RectangularSample(object):
             return on_boundary
 
         #Establishing the Boundary Conditions
-        
+
         #ASM2020.04.08 - disabled to allow nonzero boundary potential
         #bc_O = DirichletBC(ME, (Constant(0.0),Constant(0.0)), u0_boundary)
 
@@ -534,7 +534,7 @@ class RectangularSample(object):
             u.vector()[:] = rx
             eigenvalues.append(r)
             eigenfunctions.append(u)
-            
+
             #ASM2020.04.08 - disabled plotting, it's dangerous when we'll have 10000 of eigenfunctions
             #plt.figure(); plot(u,interactive=True); plt.title("Eigenvalue: {}".format(r));plt.show()
 
@@ -625,7 +625,7 @@ class RectangularSample(object):
             u.vector()[:] = rx
             eigenvalues.append(r)
             eigenfunctions.append(u)
-            
+
             #ASM2020.04.08 - disabled plotting, it's dangerous when we'll have 10000 of eigenfunctions
             #if to_plot:
             #    plt.figure(); plot(u,interactive=True); plt.title("Eigenvalue: {}".format(r))

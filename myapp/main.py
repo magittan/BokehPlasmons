@@ -1,12 +1,12 @@
+import plasmon_modeling as pm
+import placed_objects as po
+import numpy as np
 from bokeh.io import curdoc
 from bokeh.events import DoubleTap
 from bokeh.layouts import column, row, widgetbox, gridplot
 from bokeh.models import CustomJS,ColumnDataSource, Column, Button, ContinuousColorMapper, BasicTicker, ColorBar, OpenURL
 from bokeh.models.widgets import PreText, RadioButtonGroup, TextInput, Slider, Div, Dropdown
 from bokeh.plotting import figure, show
-import Plasmon_Modeling as PM
-import PlacedObjects as PO
-import numpy as np
 
 # Add sources and reflectors to certain clicked points
 def DoubleClickCallback(event):
@@ -23,12 +23,12 @@ def DoubleClickCallback(event):
         angle = rotation.value
         width = rectangular_width.value
         height = rectangular_height.value
-        input_object = PO.RectangularObject(coordinates[0]-width/2,coordinates[1]-height/2, width, height, angle)
+        input_object = po.RectangularObject(coordinates[0]-width/2,coordinates[1]-height/2, width, height, angle)
         input_object.set_type(type)
         AddRectangle(input_object, objectList)
 
     elif shape == 'Circle':
-        input_object = PO.CircularObject(coordinates[0],coordinates[1],circular_radius.value)
+        input_object = po.CircularObject(coordinates[0],coordinates[1],circular_radius.value)
         input_object.set_type(type)
         AddCircle(input_object, objectList)
 
@@ -223,7 +223,7 @@ def SimulateModel(in_objectList):
 
     w = int(mesh_width_input.value)
     h = int(mesh_height_input.value)
-    sample = PM.RectangularSample(w,h)
+    sample = pm.RectangularSample(w,h)
 
     UpdateUpdates('Building Model')
     #placing reflectors
@@ -242,8 +242,8 @@ def SimulateModel(in_objectList):
 
     UpdateUpdates('Setting Parameters')
     #setting arbitrary omega and sigma values
-    sigma = PM.S()
-    omega = PM.O()
+    sigma = pm.S()
+    omega = pm.O()
     sigma.set_sigma_values_RQ(float(simulation_params.data['l'][0]),float(simulation_params.data['Q'][0]))
     omega.set_omega_values(1,1)
     lam = float(lambda_input.value)
@@ -280,7 +280,7 @@ def _GenerateMesh(ol):
     h = int(mesh_height_input.value)
     r_a_r = QueryObjectList('Reflector','Rectangle',ol)
     c_a_r = QueryObjectList('Reflector', 'Circle', ol)
-    mesh_sample = PM.RectangularSample(w,h)
+    mesh_sample = pm.RectangularSample(w,h)
     for i in c_a_r:
         mesh_sample.placeCircularReflector(i.get_x_coord(),i.get_y_coord(),i.get_radius())
 
