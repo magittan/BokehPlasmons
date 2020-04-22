@@ -153,37 +153,7 @@ def raster_scan_tip(xs=None,ys=None,\
 
     TipEigenbasis = AES.TipResponse(Responder.xs,Responder.ys,\
                                     q=qtip,N_tip_eigenbasis=N_tip_eigenbasis)
-
-    tip_eigenpoles = np.diag((2-.1j)*np.exp(np.arange(N_tip_eigenbasis)))
-    tip_eigenresidues = 1+np.arange(N_tip_eigenbasis) #np.exp(np.arange(N_tip_eigenbasis))
-
-    Ps=np.zeros((len(xs),len(ys)),dtype=np.complex)
-    Rs=np.zeros((len(xs),len(ys)),dtype=np.complex)
-    last = 0
-    print("Raster scanning tip...")
-    start = time.time()
-    for i,x0 in enumerate(xs):
-        for j,y0 in enumerate(ys):
-
-            tip_eigenbasis = TipEigenbasis(x0,y0)
-            Rsample = Responder.GetReflectionCoefficient(tip_eigenbasis)
-
-            P_sample=np.sum(np.linalg.inv(tip_eigenpoles-Rsample).dot(tip_eigenresidues))
-            P_0=np.sum(np.linalg.inv(tip_eigenpoles).dot(tip_eigenresidues))
-
-            Ps[i,j] = P_sample-P_0
-            Rs[i,j] = np.sum(np.diag(Rsample))/N_tip_eigenbasis
-
-            last = progress(i,len(xs),last)
-
-            #if i==0 and j==0:
-            #    plt.figure()
-            #    plt.imshow(np.abs(R_alphabeta))
-            #    plt.show()
-    print("\tTime elapsed:{}".format(time.time()-start))
-    return {'P':AWA(Ps,axes=[xs,ys],axis_names=['x','y']).squeeze(),\
-            'R':AWA(Rs,axes=[xs,ys],axis_names=['x','y']).squeeze(),\
-            'Responder':Responder}
+    Responder.raster_scan(TipEigenbasis)
 
 def compare_generated_loaded_rec_eigenbasis(wl=.15,Qfactor=25,N_tip_eigenbasis=1,\
                                         coulomb_shortcut=True):

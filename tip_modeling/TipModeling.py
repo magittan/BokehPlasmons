@@ -99,10 +99,6 @@ class TipResponse:
         Can output the tip eigenbases and the excitation functions
     """
 
-    """
-        TODO: add functionality to allow for people to change the tip function
-    """
-
     def __init__(self,
                 xs=np.linspace(-1,1,101), ys=np.linspace(-1,1,101),
                 q=20, N_tip_eigenbasis=5,
@@ -110,9 +106,9 @@ class TipResponse:
         self.q = q
         self.N_tip_eigenbasis = N_tip_eigenbasis
         self.func = func
-        self.eigenbasis_translators = self._SetEigenbasisTranslators(xs,ys)
+        self.eigenbasis_translators = self._set_eigenbasis_translators(xs,ys)
 
-    def _SetEigenbasisTranslators(self,xs,ys):
+    def _set_eigenbasis_translators(self,xs,ys):
         tip_eb = []
         N = self.N_tip_eigenbasis
         for n in range(N):
@@ -142,14 +138,13 @@ class SampleResponse:
         self.N=N
 
         # Setting the various physical quantities
-        self._SetEigenbasis(eigpairs,eigmultiplicity)
-        self._TuneEigenbasis(qp)
-        self._SetAlpha(Qfactor)
-        self._SetCoulombKernel(shortcut=coulomb_shortcut,\
-                               bc=coulomb_bc)
-        self._SetReflectionMatrix(qp)
+        self._set_eigenbasis(eigpairs,eigmultiplicity)
+        self._tune_eigenbasis(qp)
+        self._set_alpha(Qfactor)
+        self._set_coulomb_kernel(shortcut=coulomb_shortcut,bc=coulomb_bc)
+        self._set_reflection_matrix(qp)
 
-    def _SetEigenbasis(self,eigpairs,eigmultiplicity=None):
+    def _set_eigenbasis(self,eigpairs,eigmultiplicity=None):
 
         print('Setting Eigenbasis...')
         start = time.time()
@@ -177,7 +172,7 @@ class SampleResponse:
         self.eigmult=AWA(eigmult,axes=[eigvals])
         print("\tTime elapsed:{}".format(time.time()-start))
 
-    def _TuneEigenbasis(self,qp):
+    def _tune_eigenbasis(self,qp):
 
         if self.debug: print('Tuning Eigenbasis...')
         start = time.time()
@@ -197,11 +192,11 @@ class SampleResponse:
         self.Qs2 = np.diag(self.use_eigvals)
         print("\tTime elapsed:{}".format(time.time()-start))
 
-    def _SetAlpha(self,Qfactor=50):
+    def _set_alpha(self,Qfactor=50):
         #We have that `angle(alpha)=-arctan2(qp2,qp1)=-arctan2(1,Q)`
         self.alpha=np.exp(-1j*np.arctan2(1,Qfactor))
 
-    def _SetCoulombKernel(self,shortcut=False,bc='open',multiprocess=False):
+    def _set_coulomb_kernel(self,shortcut=False,bc='open',multiprocess=False):
         start = time.time()
         if shortcut:
             if self.debug: print('Applying Coulomb kernel (with shortcut)...')
@@ -235,7 +230,7 @@ class SampleResponse:
             self.V_mn=(self.V_mn+self.V_mn.T)/2
         print("\tTime elapsed:{}".format(time.time()-start))
 
-    def _SetReflectionMatrix(self,qp,diag=True):
+    def _set_reflection_matrix(self,qp,diag=True):
         if self.debug: print('Computing Reflection Matrix...')
         start = time.time()
         self.qp=qp
@@ -257,7 +252,7 @@ class SampleResponse:
 
         #self.R_rmrn = self.Ws @ self.R_mn @ self.Us.T
 
-    def GetReflectionCoefficient(self,tip_eigenbasis):
+    def get_reflection_coefficient(self,tip_eigenbasis):
 
         self.Psis=np.matrix([eigfunc.ravel() for eigfunc in tip_eigenbasis]).T #Only have to unravel sample eigenfunctions once (twice speed-up)
         self.PsisInv=np.linalg.pinv(self.Psis)
@@ -270,7 +265,7 @@ class SampleResponse:
 
         return self.R_jk
 
-    def GetXYGrids(self):
+    def get_xy_grids(self):
         Xs=self.xs
         Ys=self.ys
 
@@ -278,6 +273,33 @@ class SampleResponse:
         Ys=Ys.reshape((1,len(Ys)))
 
         return Xs,Ys
+
+    def raster_scan(self, TipEigenbasis):
+        N_tip_eigenbasis = TipEigenbasis.N_tip_eigenbasis
+        tip_eigenpoles = np.diag((2-.1j)*np.exp(np.arange(N_tip_eigenbasis)))
+        tip_eigenresidues = 1+np.arange(N_tip_eigenbasis) #np.exp(np.arange(N_tip_eigenbasis))
+
+        Ps=np.zeros((len(self.xs),len(self.ys)),dtype=np.complex)
+        Rs=np.zeros((len(self.xs),len(self.ys)),dtype=np.complex)
+        last = 0
+        print("Raster scanning tip...")
+        start = time.time()
+        for i,x0 in enumerate(self.xs):
+            for j,y0 in enumerate(self.ys):
+                tip_eigenbasis = TipEigenbasis(x0,y0)
+                Rsample = self.get_reflection_coefficient(tip_eigenbasis)
+
+                P_sample=np.sum(np.linalg.inv(tip_eigenpoles-Rsample).dot(tip_eigenresidues))
+                P_0=np.sum(np.linalg.inv(tip_eigenpoles).dot(tip_eigenresidues))
+
+                Ps[i,j] = P_sample-P_0
+                Rs[i,j] = np.sum(np.diag(Rsample))/N_tip_eigenbasis
+
+                last = progress(i,len(self.xs),last)
+
+        print("\tTime elapsed:{}".format(time.time()-start))
+        return {'P':AWA(Ps,axes=[xs,ys],axis_names=['x','y']).squeeze(),\
+                'R':AWA(Rs,axes=[xs,ys],axis_names=['x','y']).squeeze()}
 
     def __call__(self,excitations):#,U,tip_eigenbasis):
         """This will evaluate the total potential"""
