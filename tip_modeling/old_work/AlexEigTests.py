@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-import TipModeling as AES
+from TipModeling import SampleResponse, TipResponse
 import os,h5py,time
 #import Plasmon_Modeling as PM
 import multiprocessing as mp
@@ -140,7 +140,7 @@ def raster_scan_tip(xs=None,ys=None,\
         eigpairs = build_rect_eigpairs()
 
     if Responder is None:
-        Responder = AES.SampleResponse(eigpairs,qp=qp,Qfactor=Qfactor,\
+        Responder = SampleResponse(eigpairs,qp=qp,Qfactor=Qfactor,\
                                        eigmultiplicity=eigmultiplicity,\
                                        N=N_sample_eigenbasis,\
                                        coulomb_shortcut=coulomb_shortcut)
@@ -151,7 +151,7 @@ def raster_scan_tip(xs=None,ys=None,\
     if ys is None: ys=Responder.ys
     elif not hasattr(ys,'__len__'): ys=[ys]
 
-    TipEigenbasis = AES.TipResponse(Responder.xs,Responder.ys,\
+    TipEigenbasis = TipResponse(Responder.xs,Responder.ys,\
                                     q=qtip,N_tip_eigenbasis=N_tip_eigenbasis)
     Responder.raster_scan(TipEigenbasis)
 
@@ -184,7 +184,7 @@ def linescan_sweeping_qp(wltip=1,N_tip_eigenbasis=1,
     qps=2*np.pi/np.linspace(wlmax,wlmin,Nqps)
 
     eigpairs=build_ribbon_eigpairs(Nx=Nx,Lx=Lx,Ly=Ly,Nqmax=None)
-    Responder=AES.SampleResponse(eigpairs,qp=qtip,N=N_sample_eigenbasis,\
+    Responder=SampleResponse(eigpairs,qp=qtip,N=N_sample_eigenbasis,\
                                  Qfactor=Qfactor,\
                                  coulomb_shortcut=coulomb_shortcut,\
                                  coulomb_bc=coulomb_bc)
