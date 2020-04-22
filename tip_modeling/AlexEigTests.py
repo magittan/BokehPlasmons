@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-import AlexEigScattering as AES
+import TipModeling as AES
 import os,h5py,time
 #import Plasmon_Modeling as PM
 import multiprocessing as mp
@@ -9,26 +9,10 @@ from common import numerical_recipes as numrec
 from common.baseclasses import ArrayWithAxes as AWA
 import matplotlib.pyplot as plt
 from itertools import product
-from Utils import Progress, load_eigpairs ,planewave
+from Utils import progress, load_eigpairs, planewave
 import pickle
 
-"""
-def load_eigpairs(name='UnitSquareMesh_100x100_1000_eigenbasis.h5'):
-
-    filepath=os.path.join(os.path.dirname(__file__),'..',\
-                        'sample_eigenbasis_data',name)
-    print('Loading eigenpairs from "%s"...'%filepath)
-
-    f=open(filepath,'rb')
-
-    E=pickle.load(f); f.close()
-    eigpairs=dict([(E.axes[0][i],E[i]) for i in range(len(E))])
-
-    return eigpairs
-"""
-
 def build_rect_eigpairs(Lx=12,Rx=10,Ry=10,Nx=150,Ly=12,Nqmax=None):
-
     Rxmin,Rxmax=-Rx/2,+Rx/2
     Rymin,Rymax=-Ry/2,+Ry/2
 
@@ -36,9 +20,6 @@ def build_rect_eigpairs(Lx=12,Rx=10,Ry=10,Nx=150,Ly=12,Nqmax=None):
     Ny=int(Ly/Lx*Nx)
     ys=np.linspace(-Ly/2,+Ly/2,Ny)
     print('Generating eigenpairs on x,y=[-%s:+%s:%s],[-%s:+%s:%s]'%(Lx/2,Lx/2,Nx,Ly/2,Ly/2,Ny))
-
-    global eigpairs
-    global eigmultiplicity
 
     yv,xv = np.meshgrid(ys,xs)
     eigpairs = {}
@@ -79,7 +60,6 @@ def build_rect_eigpairs(Lx=12,Rx=10,Ry=10,Nx=150,Ly=12,Nqmax=None):
         while eigval in eigpairs: eigval+=1e-8
         eigpairs[eigval]=pw
 
-
     return eigpairs
 
 def build_ribbon_eigpairs(Lx=12,Rx=10,Nx=150,Ly=12,Nqmax=None):
@@ -90,9 +70,6 @@ def build_ribbon_eigpairs(Lx=12,Rx=10,Nx=150,Ly=12,Nqmax=None):
     Ny=int(Ly/Lx*Nx)
     ys=np.linspace(-Ly/2,+Ly/2,Ny)
     print('Generating eigenpairs on x,y=[-%s:+%s:%s],[-%s:+%s:%s]'%(Lx/2,Lx/2,Nx,Ly/2,Ly/2,Ny))
-
-    global eigpairs
-    global eigmultiplicity
 
     yv,xv = np.meshgrid(ys,xs)
     eigpairs = {}
@@ -150,7 +127,7 @@ def build_ribbon_eigpairs(Lx=12,Rx=10,Nx=150,Ly=12,Nqmax=None):
 
     return eigpairs
 
-def RasterScanTip(xs=None,ys=None,\
+def raster_scan_tip(xs=None,ys=None,\
                     qtip=2*np.pi/.15,qp=2*np.pi/.15,
                     N_tip_eigenbasis = 1,\
                     Responder=None,eigpairs=None,\
@@ -159,7 +136,6 @@ def RasterScanTip(xs=None,ys=None,\
                      N_sample_eigenbasis=100,\
                     coulomb_shortcut=False):
 
-    global TipEigenbasis
     if eigpairs is None:
         eigpairs = build_rect_eigpairs()
 
@@ -198,7 +174,7 @@ def RasterScanTip(xs=None,ys=None,\
             Ps[i,j] = P_sample-P_0
             Rs[i,j] = np.sum(np.diag(Rsample))/N_tip_eigenbasis
 
-            last = Progress(i,len(xs),last)
+            last = progress(i,len(xs),last)
 
             #if i==0 and j==0:
             #    plt.figure()
@@ -209,7 +185,7 @@ def RasterScanTip(xs=None,ys=None,\
             'R':AWA(Rs,axes=[xs,ys],axis_names=['x','y']).squeeze(),\
             'Responder':Responder}
 
-def CompareGeneratedLoadedRecEigenbasis(wl=.15,Qfactor=25,N_tip_eigenbasis=1,\
+def compare_generated_loaded_rec_eigenbasis(wl=.15,Qfactor=25,N_tip_eigenbasis=1,\
                                         coulomb_shortcut=True):
 
     qtip=2*np.pi/wl
@@ -218,23 +194,22 @@ def CompareGeneratedLoadedRecEigenbasis(wl=.15,Qfactor=25,N_tip_eigenbasis=1,\
     eigpairs_gen=build_rect_eigpairs(Lx=1,Rx=1,Ry=1,Nx=101,Ly=1,Nmax=1000)
     eigpairs_loaded=load_eigpairs(name='UnitSquareMesh_101x101x2000_Neumann_eigenbasis.pickle')
 
-    d_gen=RasterScanTip(eigpairs_gen,qtip=qtip,qp=qp,Qfactor=Qfactor,\
+    d_gen=raster_scan_tip(eigpairs_gen,qtip=qtip,qp=qp,Qfactor=Qfactor,\
                         N_tip_eigenbasis=N_tip_eigenbasis,\
                         coulomb_shortcut=coulomb_shortcut)
-    d_loaded=RasterScanTip(eigpairs_loaded,qtip=qtip,qp=qp,Qfactor=Qfactor,\
+    d_loaded=raster_scan_tip(eigpairs_loaded,qtip=qtip,qp=qp,Qfactor=Qfactor,\
                            N_tip_eigenbasis=N_tip_eigenbasis,\
                            coulomb_shortcut=coulomb_shortcut)
 
     return dict(loaded=d_loaded,gen=d_gen)
 
-def LinescanSweepingQp(wltip=1,N_tip_eigenbasis=1,
+def linescan_sweeping_qp(wltip=1,N_tip_eigenbasis=1,
                        Nx=150,Lx=12,Ly=2,
                        wlmax=5,wlmin=.1,Nqps=50,Qfactor=25,
                        N_sample_eigenbasis=1000,
                        coulomb_shortcut=True,\
                        coulomb_bc='closed'):
 
-    global Responder
     qtip=2*np.pi/wltip
     qps=2*np.pi/np.linspace(wlmax,wlmin,Nqps)
 
@@ -254,7 +229,7 @@ def LinescanSweepingQp(wltip=1,N_tip_eigenbasis=1,
 
         Responder._SetReflectionMatrix(qp,diag=True)
 
-        linescan=RasterScanTip(xs=xs,ys=0,qtip=qtip,\
+        linescan=raster_scan_tip(xs=xs,ys=0,qtip=qtip,\
                                N_tip_eigenbasis = N_tip_eigenbasis,\
                                Responder=Responder)
         Rs.append(linescan['R'])
@@ -265,4 +240,4 @@ def LinescanSweepingQp(wltip=1,N_tip_eigenbasis=1,
 
     return dict(P=Ps,R=Rs,Responder=Responder)
 
-RasterScanTip()
+raster_scan_tip()
