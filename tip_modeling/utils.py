@@ -56,7 +56,8 @@ def planewave(qx,qy,x,y,x0=0,y0=0,phi0=0):
 def faketip(q,n,N,x,y):
     Q = q*(n+1)
     exp_prefactor = np.exp(-2*(n+1)/(N+1))
-    A = exp_prefactor*Q**2
-    D=2
+    
+    D=1#The larger D goes, the longer range the tip excitation
+    func = lambda x,y: np.exp(-q**2/(2*D**2)*(x**2+y**2))*bessel(1,0,Q,x,y)
 
-    return lambda x,y: np.exp(-Q/D*np.sqrt(x**2+y**2))*bessel(A,0,Q,x,y)
+    return func
