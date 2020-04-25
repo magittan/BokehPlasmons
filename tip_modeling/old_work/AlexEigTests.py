@@ -169,9 +169,9 @@ def build_ribbon_eigpairs(Lx=12,Rx=10,Nx=150,Ly=12,Nqmax=None,qys=None):
 def build_homog_eigpairs(Lx=10,Nx=100,Ly=10,Nqmax=None):
     
     dx=Lx/Nx
-    xs=np.arange(Nx)*dx
+    xs=np.arange(Nx)*dx; xs-=np.mean(xs)
     Ny=int(Ly/Lx*Nx)
-    ys=np.arange(Ny)*dx
+    ys=np.arange(Ny)*dx; ys-=np.mean(ys)
     print('Generating eigenpairs on x,y=[-%s:+%s:%s],[-%s:+%s:%s]'%(Lx/2,Lx/2,Nx,Ly/2,Ly/2,Ny))
     
     global eigpairs
@@ -190,16 +190,17 @@ def build_homog_eigpairs(Lx=10,Nx=100,Ly=10,Nqmax=None):
     
     qxs=np.arange(Nqsx+1)*q0x
     qys=np.arange(Nqsy+1)*q0y
-    pairs=list(product(qxs,qys))
-    eigvals=[qx**2+qy**2 for qx,qy in pairs]
-    eigvals,pairs=zip(*sorted(zip(eigvals,pairs)))
+    qpairs=list(product(qxs,qys))
+    eigvals=[qx**2+qy**2 for qx,qy in qpairs]
+    eigvals,qpairs=zip(*sorted(zip(eigvals,qpairs)))
+    eigvals=list(eigvals)[:Nqmax//4] #factor of 4 is because we entertain a 4-fold degeneracy
+    qpairs=list(qpairs)[:Nqmax//4]
     
-    for eigval,pair in zip(eigvals[:Nqmax],\
-                           pairs[:Nqmax]):
+    for eigval,qpair in zip(eigvals,qpairs):
         
         #We cannot admit a constant potential, no charge neutrality
         if eigval==0: continue
-        qx,qy=pair
+        qx,qy=qpair
         
         #First the cos*sin wave
         pwxs=planewave(qx,0,xv,yv,\
@@ -220,6 +221,7 @@ def build_homog_eigpairs(Lx=10,Nx=100,Ly=10,Nqmax=None):
             if not pw.any(): continue
             
             pw = AWA(pw, axes = [xs,ys])
+            pw/=np.sqrt(np.sum(pw**2))
             
             while eigval in eigpairs: eigval+=1e-8
             eigpairs[eigval]=pw

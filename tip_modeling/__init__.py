@@ -217,7 +217,7 @@ class SampleResponse:
     def _set_eigenbasis(self,eigpairs,eigmultiplicity=None):
 
         print('Setting Eigenbasis...')
-        start = time.time()
+        T=Timer()
         # For degeneracy
         if not eigmultiplicity: eigmultiplicity={}
         eigvals = sorted(list(eigpairs.keys()))
@@ -228,7 +228,7 @@ class SampleResponse:
 
             #normalize
             eigfunc=np.array(eigpairs[eigval])
-            eigfunc=eigfunc/np.sqrt(np.sum(eigfunc**2))
+            eigfunc=normalize(eigfunc)
 
             eigfuncs.append(eigfunc)
             if eigval in eigmultiplicity:
@@ -240,12 +240,12 @@ class SampleResponse:
                             axes=[eigvals,self.xs,self.ys])
         self.eigvals = self.eigfuncs.axes[0] #sorted
         self.eigmult=AWA(eigmult,axes=[eigvals])
-        print("\tTime elapsed:{}".format(time.time()-start))
+        T()
 
     def _tune_eigenbasis(self,qp):
 
         if self.debug: print('Tuning Eigenbasis...')
-        start = time.time()
+        T=Timer()
         index=np.argmin(np.abs(self.eigvals-np.abs(qp)**2)) #@ASM2019.12.22 - This is to treat `E` not as the squared eigenvalue, but in units of the eigenvalue (`q_omega)
         ind1=np.max([index-self.N//2,0])
         ind2=ind1+self.N
@@ -260,14 +260,14 @@ class SampleResponse:
 
         self.Us = np.matrix([eigfunc.ravel() for eigfunc in self.use_eigfuncs]).T
         self.Qs2 = np.diag(self.use_eigvals)
-        print("\tTime elapsed:{}".format(time.time()-start))
+        T()
 
     def _set_alpha(self,Qfactor=50):
         #We have that `angle(alpha)=-arctan2(qp2,qp1)=-arctan2(1,Q)`
         self.alpha=np.exp(-1j*np.arctan2(1,Qfactor))
 
     def _set_coulomb_kernel(self,shortcut=False,bc='open',multiprocess=False):
-        start = time.time()
+        T=Timer()
         if shortcut:
             if self.debug: print('Applying Coulomb kernel (with shortcut)...')
             self.use_Veigfuncs=[2*np.pi/np.sqrt(eigval)*eigfunc \
@@ -296,19 +296,22 @@ class SampleResponse:
                     self.Ws=np.matrix([Veigfunc.ravel() for Veigfunc in Veigfuncs]).T
                     self.V_mn=list(Pool.starmap(inner_prod,\
                                                 product(eigfuncs,Veigfuncs)))
+                    self.V_mn=np.matrix(np.array(self.V_mn).reshape((self.N,)*2))
             else:
                 self.use_Veigfuncs=list(map(apply_CC,eigfuncs))
                 Veigfuncs=[np.array(Veigfunc) for Veigfunc in self.use_Veigfuncs] #demote to temporary arrays for speed
+                
                 self.Ws=np.matrix([Veigfunc.ravel() for Veigfunc in Veigfuncs]).T
-                self.V_mn=list(starmap(inner_prod,product(eigfuncs,Veigfuncs)))
+                self.V_mn=build_matrix(eigfuncs,Veigfuncs)
+                #self.V_mn=list(starmap(inner_prod,product(eigfuncs,Veigfuncs)))
+                #self.V_mn=np.matrix(np.array(self.V_mn).reshape((self.N,)*2))
             
-            self.V_mn=np.matrix(np.array(self.V_mn).reshape((self.N,)*2))
             self.V_mn=(self.V_mn+self.V_mn.T)/2
-        print("\tTime elapsed:{}".format(time.time()-start))
+        T()
 
     def _set_reflection_matrix(self,qp,diag=True):
         if self.debug: print('Computing Reflection Matrix...')
-        start = time.time()
+        T=Timer()
         self.qp=qp
 
         if diag: V=np.diag(np.diag(self.V_mn))
@@ -324,7 +327,7 @@ class SampleResponse:
         #Weight matrix elements by multiplicity of the eigenfunction
         Mult=np.diag(self.use_eigmult)
         self.R_mn = self.R_mn @ Mult
-        print("\tTime elapsed:{}".format(time.time()-start))
+        T()
 
     def get_reflection_coefficient(self,tip_eigenbasis):
         
@@ -373,7 +376,7 @@ class SampleResponse:
     
         last = 0
         print("Raster scanning tip...")
-        start = time.time()
+        T=Timer()
         for i,x0 in enumerate(xs):
             for j,y0 in enumerate(ys):
                 tip_eigenbasis = TipEigenbasis(x0,y0)
@@ -390,7 +393,7 @@ class SampleResponse:
 
                 last = progress(i,len(xs),last)
 
-        print("\tTime elapsed:{}".format(time.time()-start))
+        T()
         return {'P':AWA(Ps,axes=[xs,ys],axis_names=['x','y']).squeeze(),\
                 'R':AWA(Rs,axes=[xs,ys],axis_names=['x','y']).squeeze()}
 
@@ -413,6 +416,7 @@ class SampleResponse:
         for large matrices to avoid off-diagonal elements.  But it's now seen that this function
         does not affect results."""
         
+        T=Timer()
         if self.debug: print('Diagonalizing composite operator...')
         
         eigfunc_shape=self.use_eigfuncs[0].shape
@@ -428,6 +432,8 @@ class SampleResponse:
                                axes=[self.xs,self.ys]) \
                            for u in self.VL_Us.T]
         
+        T()
+            
         return self.VL_eigfuncs
     
         
