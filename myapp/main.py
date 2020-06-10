@@ -146,11 +146,14 @@ def UpdateTypeToggle():
     if indicator == 1:
         SetPlaceReflector()
 
-def UpdatePlotValue(attr,old,new):
-    plot_value_dropdown.label = new
+def UpdatePlotValue(event):
     w = int(mesh_width_input.value)
     h = int(mesh_height_input.value)
-    output_display.image(new, source = display_data.data,x=0,y=0,dw=w,dh=h,palette='Viridis256')
+    
+    new_dict = {}
+    new_dict['type'] = [event.item]
+    dropdown_details.data = new_dict
+    output_display.image(event.item, source = display_data.data,x=0,y=0,dw=w,dh=h,palette='Viridis256')
 
 def TestURLCallback(event):
     with open('./myapp/static/test1.dat','w+') as f:
@@ -254,7 +257,7 @@ def SimulateModel(in_objectList):
     sample.run(omega,sigma,density = int(mesh_density_input.value), _lam=lam,_phi=phi)
 
     UpdateUpdates('Done!')
-    results = sample.cast_solution_to_Array()
+    results = sample.cast_solution_to_array()
 
     real = results[0]
     imag = results[1]
@@ -267,8 +270,8 @@ def SimulateModel(in_objectList):
     display_data.data['Phase'] = [phi]
     w = int(mesh_width_input.value)
     h = int(mesh_height_input.value)
-    print(plot_value_dropdown.value)
-    new_d = ColumnDataSource({'data': display_data.data[plot_value_dropdown.value]})
+    print(dropdown_details.data['type'][0])
+    new_d = ColumnDataSource({'data': display_data.data[dropdown_details.data['type'][0]]})
     output_display.image('data',source=new_d,x=0,y=0,dw=w,dh=h, palette='Viridis256')
     #output_display.image(plot_value_dropdown.value,source=display_data,x=0,y=0,dw=w,dh=h, palette='Viridis256')
 
@@ -300,6 +303,7 @@ display_data= ColumnDataSource({
         'Phase': [np.zeros((x_bound,y_bound))]
 })
 details = ColumnDataSource({'type' : ['Source'], 'shape': ['Rectangle'],'rotation': [0]})
+dropdown_details = ColumnDataSource({'type' : ['Real Part']})
 simulation_params = ColumnDataSource({'Q' : [100], 'l': [4]})
 c_source = ColumnDataSource(data=dict(x=[], y=[], r = []))
 c_reflector = ColumnDataSource(data=dict(x=[], y=[], r = []))
@@ -356,14 +360,14 @@ reset_button = Button(label='Reset Board',width=150)
 generate_mesh_button = Button(label='Generate Mesh',width=200)
 
 jscallback = CustomJS(code='window.open("/myapp/static/test1.dat");')
-test_url_button = Button(label='Test URL Generation',width=200,callback=jscallback)
+# test_url_button = Button(label='Test URL Generation',width=200,callback=jscallback)
 
 # Radio buttons
 toggle_source_reflector = RadioButtonGroup(labels=['Source', 'Reflector'], active=0,width=200)
 toggle_circle_rectangle = RadioButtonGroup(labels=['Circle', 'Rectangle'], active=1,width=200)
 
 # Dropdown
-plot_value_dropdown = Dropdown(label='Real Part',value='Real Part',menu=[
+plot_value_dropdown = Dropdown(label='Visualization', menu=[
     'Real Part',
     'Imaginary Part',
     'Phase',
@@ -382,7 +386,7 @@ quality_factor_input.on_change('value',SetQ)
 plasmon_wavelength_input.on_change('value',SetL)
 mesh_width_input.on_change('value', SetMeshWidth)
 mesh_height_input.on_change('value', SetMeshHeight)
-plot_value_dropdown.on_change('value', UpdatePlotValue)
+plot_value_dropdown.on_click(UpdatePlotValue)
 clickable_display.on_event(DoubleTap, DoubleClickCallback)
 
 clickable_display.circle(source=c_source,x='x',y='y',radius = 'r', color='navy', alpha = 0.5)

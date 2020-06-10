@@ -6,30 +6,9 @@ import matplotlib.pyplot as plt
 import matplotlib.tri as tri
 import math
 import random
-import FenicsTools as FT
 import numpy as np
 
 #------------------------------------------------Plotting and Extraction Tools-----------------------------------------------------#
-
-def fenics_func_to_AWA(input_function, input_mesh):
-    """
-    Can be used in order to cast Fenics Functions into AWA objects for further processing. Currently running into a snafu.
-    """
-    V = FunctionSpace(input_mesh, 'Lagrange', 3)
-
-    input_function.set_allow_extrapolation(True)
-    Pv = interpolate(input_function,V)
-
-    V2 = FunctionSpace(input_mesh, 'CG', 1)
-    u0 = interpolate(Pv, V2)
-    # u1 = interpolate(Pv.split(deepcopy=True)[1], V2)
-
-    BF0 = FT.BoxField2(u0)
-    # BF1 = FT.BoxField2(u1)
-
-    return BF0.to_AWA()
-
-#More general method in order to convert a fenics function into something more tractable
 
 def mesh2triang(mesh):
     """
@@ -133,88 +112,3 @@ def plot_fenics(z):
     #         cbar_ax = fig.add_axes([0.85, 0.15, 0.05, 0.7])
     #         fig.colorbar(plt.subplot(133), cax=cbar_ax)
     plt.show()
-
-##################### FUNCTIONS FOR ROTATING OBJECTS ##########################
-#--------------------------------------------------------------------------------------------------------------------------------#
-
-def calculated_centroid(vertices):
-    """
-    Function meant for calculating the centroid of a 2D polygon
-
-    Args:
-        vertices (list): list of pairs of vertices
-
-    Returns:
-        centroids (list): [x_centroid, y_centroid]
-    """
-    x_value, y_value = 0,0
-    for i in vertices:
-        x_value += i[0]
-        y_value += i[1]
-
-    return [x_value/len(vertices),y_value/len(vertices)]
-
-def rotate_object(vertices_list, rotation_degrees):
-    """
-    Function meant for rotating a 2D polygon
-
-    Args:
-        vertices (list): list of pairs of vertices
-        rotation_degrees (float): degree amount to rotate the vertices by
-
-    Returns:
-        output_vertices (list): list of pairs of vertices after being rotated
-    """
-    output_vertices = []
-    theta = np.radians(rotation_degrees)
-    c, s = np.cos(theta), np.sin(theta)
-    R = np.array(((c,-s), (s, c)))
-    for vertex in vertices_list:
-        output_vertices.append([vertex[0]*c-vertex[1]*s,vertex[1]*c+vertex[0]*s])
-    return output_vertices
-
-def center_then_rotate(vertices, rotation_degrees):
-    """
-    Function to first center then rotate the vertices then transform it back. Otherwise the rotation
-    would be around the origin.
-
-    Args:
-        vertices (list): list of pairs of vertices
-        rotation_degrees (float): degree amount to rotate the vertices by
-
-    Return:
-        modified_vertices (list): list of pairs of vertices after being centered, rotated, then transformed back
-    """
-    #First calculate the centroid
-    centroid = np.array(calculated_centroid(vertices))
-    #subtract centroid from the points
-    modified_vertices = [np.array(i)-centroid for i in vertices]
-    modified_vertices=rotate_object(modified_vertices,rotation_degrees)
-    modified_vertices = [np.array(i)+centroid for i in modified_vertices]
-
-    return modified_vertices
-
-def counter_clockwise_sort(vertices):
-    """
-    Function to remedy the error given when Fenics needs the vertices in counterclockwise order
-
-    Args:
-        vertices (list): list of pairs of vertices
-
-    Return:
-        output (list): list of pairs of vertices after being centered, rotated, then transformed back
-    """
-    #This first line looks suspicious...
-    centroid=calculated_centroid(rotate_object(vertices,1))
-    def func(array):
-        print(array)
-        return np.arctan(array[1]/array[0])
-
-    to_sort=dict(zip(map(func,[np.array(i)-centroid for i in vertices]),vertices))
-    # print(len(map(func,[np.array(i)-centroid for i in vertices])))
-    # print(len(vertices))
-    output=[]
-    for key in sorted(to_sort):
-        output.append(to_sort[key])
-
-    return output

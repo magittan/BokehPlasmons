@@ -7,7 +7,6 @@ import matplotlib.pyplot as plt
 import matplotlib.tri as tri
 import math
 import random
-import FenicsTools as FT
 import numpy as np
 from toolbox import *
 
@@ -31,78 +30,6 @@ Updates:
 4.9.2019: Modification to the plasmon equation, leads to less oscillations, and modified the target eigenvalue solve so
           it could take in sigma as a parameter.
 """
-
-def helmholtz(mesh, eigenvalue, number_extracted = 6, sigma_2=1.0, to_plot=False, **kwargs):
-    """Solves the Helmholtz equation on an arbitary mesh for a specific eigenvalue. Possible to "aim" for
-       a specific eigenvalue by specifying an eigenvalue. Can also extract eigenvalues near the original
-       eigenvalue by specifying the number of eigenvalues expected as a return through the kwarg number_extracted.
-
-        Args:
-            param1: mesh, FEniCS mesh
-            param2: eigenvalue, number that is the value of the specified eigenvalue
-            param3: number_extracted, kwarg default set to 6, will additionally extract 6
-                    eigenvalues near the specified eigenvalue.
-            param4: to_plot, when True will plot the eigenfunctions and eigenvalues
-
-        Returns:
-            Dictionary indexed by eigenvalue filled with the appropriate FEniCS function eigenfunctions
-
-    """
-    V = FunctionSpace(mesh, 'Lagrange', 3)
-    Pot = Expression(str(sigma_2),element = V.ufl_element())
-
-    #build essential boundary conditions
-    def u0_boundary(x, on_boundary):
-        return on_boundary
-
-    bc = DirichletBC(V,Constant(0.0), u0_boundary)
-
-    #define functions
-    u = TrialFunction(V)
-    v = TestFunction(V)
-
-    #define problem
-    a = (inner(grad(u), grad(v)) \
-         + Pot*u*v)*dx
-    m = u*v*dx
-
-    A = PETScMatrix()
-    M = PETScMatrix()
-    _ = PETScVector()
-    L = Constant(0.)*v*dx
-
-    assemble_system(a, L, bc, A_tensor=A, b_tensor=_)
-    #assemble_system(m, L,bc, A_tensor=M, b_tensor=_)
-    assemble_system(m, L, A_tensor=M, b_tensor=_)
-
-    #create eigensolver
-    eigensolver = SLEPcEigenSolver(A,M)
-    eigensolver.parameters['spectrum'] = 'target real'
-    eigensolver.parameters['tolerance'] = 1.e-15
-    eigensolver.parameters["spectral_transform"] = "shift-and-invert"
-    eigensolver.parameters["spectral_shift"] = float(eigenvalue) # Could be a possible spot for overflow
-
-    #solve for eigenvalues
-    eigensolver.solve(number_extracted)
-
-    assert eigensolver.get_number_converged() > 0
-
-    eigenvalues = []
-    eigenfunctions = []
-
-    for i in range(number_extracted):
-        u = Function(V)
-        r, c, rx, cx = eigensolver.get_eigenpair(i)
-
-        #assign eigenvector to function
-        u.vector()[:] = rx
-        eigenvalues.append(r)
-        eigenfunctions.append(u)
-
-        if to_plot:
-            plt.figure(); plot(u,interactive=True);plt.title("Eigenvalue: {}".format(r))
-
-    return dict(list(zip(eigenvalues,eigenfunctions)))
 
 class RectangularSample(object):
 
@@ -632,43 +559,7 @@ class RectangularSample(object):
 
         return dict(list(zip(eigenvalues,eigenfunctions)))
 
-    def cast_solution_to_AWA(self,density=200):
-        """Casts the FEniCS function solution to an ArrayWithAxes object. (Having Trouble with this at the Moment)
-
-        Args:
-            param1: density, kwarg default set to 200, the density of the mesh to interpolate onto
-
-        Returns:
-            ArrayWithAxes object
-
-        """
-        mesh0 = self.getMesh(density)
-        L3 = FiniteElement("Lagrange", mesh0.ufl_cell(), 2)
-        V = MixedElement([L3,L3])
-        ME0 = FunctionSpace(mesh0,V)
-
-        mesh1 = RectangleMesh(Point(0,0),Point(self.width,self.height),density,density)
-        L3 = FiniteElement("Lagrange", mesh1.ufl_cell(), 2)
-        V = MixedElement([L3,L3])
-        ME1 = FunctionSpace(mesh1,V)
-
-        if self.solution is None:
-            print("You need to run the sample first")
-            return
-
-        self.solution.set_allow_extrapolation(True)
-        Pv = interpolate(self.solution,ME1)
-
-        V2 = FunctionSpace(mesh1, 'CG', 1)
-        u0 = interpolate(Pv.split(deepcopy=True)[0], V2)
-        u1 = interpolate(Pv.split(deepcopy=True)[1], V2)
-
-        BF0 = FT.BoxField2(u0)
-        BF1 = FT.BoxField2(u1)
-
-        return (BF0.to_AWA(),BF1.to_AWA())
-
-    def cast_solution_to_Array(self,density=200):
+    def cast_solution_to_array(self,density=200):
         """
             Casts the solution to a numpy.array object through the function "process_fenics_function" from the Toolbox Library
         """
@@ -787,83 +678,3 @@ class equationPhraser(object):
     def set_values(self,eigenval):
         pass
         #Need some parameters to specify
-
-#--------------------------------------------------------------------------------------------------------------------------------#
-#Additional Fenics Functions
-def mesh2triang(mesh):
-    xy = mesh.coordinates()
-    return tri.Triangulation(xy[:, 0], xy[:, 1], mesh.cells())
-
-def mplot(obj):
-    """Plots fenics functions in matplotlib.pyplot
-
-        Args:
-            param1: FEniCS function
-
-        Returns:
-            None
-    """
-    plt.gca().set_aspect('equal')
-    if isinstance(obj, Function):
-        mesh = obj.function_space().mesh()
-        if (mesh.geometry().dim() != 2):
-            raise(AttributeError)
-        if obj.vector().size() == mesh.num_cells():
-            C = obj.vector().array()
-            plt.tripcolor(mesh2triang(mesh), C,cmap='seismic')
-        else:
-            C = obj.compute_vertex_values(mesh)
-            plt.tripcolor(mesh2triang(mesh), C, shading='gouraud',cmap='seismic')
-    elif isinstance(obj, Mesh):
-        if (obj.geometry().dim() != 2):
-            raise(AttributeError)
-        plt.triplot(mesh2triang(obj), color='k')
-
-def plot_fenics(z):
-    fig = plt.figure()
-    #         plt.subplot(131);mplot(mesh);plt.title("Mesh"),plt.tick_params(
-    #             axis='both',          # changes apply to the x-axis
-    #             which='both',      # both major and minor ticks are affected
-    #             bottom=False,
-    #             right = False,     # ticks along the bottom edge are off
-    #             left = False,
-    #             top=False)         # ticks along the top edge are off)
-    real = z.split(deepcopy=True)[0]
-    r_lim = max(abs(max(real.vector())),abs(min(real.vector())))
-    plt.subplot(121);mplot(real);plt.title("Real Part"),plt.tick_params(
-        axis='both',          # changes apply to the x-axis
-        which='both',      # both major and minor ticks are affected
-        bottom=False,
-        right = False,     # ticks along the bottom edge are off
-        left = False,
-        top=False,         # ticks along the top edge are off
-        labelleft=False);
-#     cax = make_axes_locatable(plt.gca()).append_axes("right", size="5%", pad=0.05);plt.colorbar(cax=cax);plt.clim(-r_lim,r_lim)
-
-
-    imaginary = z.split(deepcopy=True)[1]
-    #i_lim = max(abs(max(imaginary.vector())),abs(min(imaginary.vector())))
-    plt.subplot(122);mplot(imaginary);plt.title("Im Part"),plt.tick_params(
-        axis='both',          # changes apply to the x-axis
-        which='both',      # both major and minor ticks are affected
-        bottom=False,
-        right = False,     # ticks along the bottom edge are off
-        left = False,
-        top=False,         # ticks along the top edge are off
-        labelleft=False);
-    #cax = make_axes_locatable(plt.gca()).append_axes("right", size="5%", pad=0.05);#plt.colorbar(cax=cax);plt.clim(-i_lim,i_lim)
-
-    #         fig.subplots_adjust(right=0.8)
-    #         cbar_ax = fig.add_axes([0.85, 0.15, 0.05, 0.7])
-    #         fig.colorbar(plt.subplot(133), cax=cbar_ax)
-    plt.show()
-#--------------------------------------------------------------------------------------------------------------------------------#
-
-def rotate_object(vertices_list, rotation_degrees):
-    output_vertices = []
-    theta = np.radians(rotation_degrees)
-    c, s = np.cos(theta), np.sin(theta)
-    R = np.array(((c,-s), (s, c)))
-    for vertex in vertices_list:
-        output_vertices.append([vertex[0]*c-vertex[1]*s,vertex[1]*c+vertex[0]*s])
-    return output_vertices
