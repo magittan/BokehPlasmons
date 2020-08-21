@@ -306,7 +306,7 @@ class RectangularSample(object):
         g = Expression(('cos( (2*pi/lam)*(cos(phi)*x[0]+sin(phi)*x[1]) )','cos( (2*pi/lam)*(cos(phi)*x[0]+sin(phi)*x[1]) )'),
             element = ME.ufl_element(), phi=_phi, lam=_lam)
         bc_I = DirichletBC(ME,g, boundaries, 2)
-        #bc_I = DirichletBC(ME,(Constant(1.0),(Constant(1.0))), boundaries, 2)
+#         bc_I = DirichletBC(ME,(Constant(1.0),(Constant(1.0))), boundaries, 2)
 
         s_1,s_2 = sigma.get_sigma_values()
         o = omega.get_omega_values()

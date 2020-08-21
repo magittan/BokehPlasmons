@@ -14,5 +14,8 @@ bokeh serve app.py --port 5100
 # To run this on a VM
 bokeh serve --show --allow-websocket-origin='*' myapp.py
 
+# Things to add / check
+-Exportability for meshs (ability to generate meshes)
+
 # Environment File
 Conda environment saved in the environment.yml file
